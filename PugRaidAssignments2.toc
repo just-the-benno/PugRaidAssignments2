@@ -1,0 +1,20 @@
+## Interface: 20504
+## Title: Pug Raid Assignments 2
+## Notes: Raid assignment planning and session management for TBC Classic.
+## Author: just-the-benno
+## Version: 2.0.0
+## SavedVariables: PugRaidAssignmentsDB
+
+Storage.lua
+Roster.lua
+Parser.lua
+Template.lua
+Dispatcher.lua
+UI\Widgets.lua
+UI\ViewWindow.lua
+UI\AssignWindow.lua
+UI\SessionViewWindow.lua
+UI\DocumentsWindow.lua
+UI\RaidListWindow.lua
+UI\PlayerBar.lua
+Core.lua
