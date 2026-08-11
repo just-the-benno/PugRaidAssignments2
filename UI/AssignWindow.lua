@@ -16,12 +16,13 @@ local sectionsData  = {}
 local currentRaidId, currentDocId, currentMode
 
 local ROW_H = 26
-local LABEL_W = 120
+local LABEL_W = 180
 
 local function ClearVarRows()
     for _, row in ipairs(varRows) do
         row.label:Hide()
         row.bgFrame:Hide()
+        if row.pickBtn then row.pickBtn:Hide() end
     end
     varRows = {}
 end
@@ -121,14 +122,29 @@ local function Rebuild(raidId, docId, sections, mode)
         lbl:SetWidth(LABEL_W)
         lbl:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
 
-        local eb, bg = W.MakeEditBox(frame, 250, 22, false)
+        local eb, bg = W.MakeEditBox(frame, 190, 22, false)
         bg:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_W + 16, y + 1)
 
         -- Prefill from lastValues
         local lastVal = S.GetLastValue(raidId, docId, var)
         if lastVal then eb:SetText(lastVal) end
 
-        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var }
+        -- Roster-select dropdown button
+        local btnPick = W.MakeButton(frame, "Select...", 70, 22)
+        btnPick:SetPoint("LEFT", bg, "RIGHT", 6, 0)
+        local capturedEb = eb
+        btnPick:SetScript("OnClick", function(self)
+            local members = R.GetMembers()
+            local items = {}
+            for _, name in ipairs(members) do
+                items[#items + 1] = { text = name, value = name }
+            end
+            W.OpenDropdown(self, items, function(value)
+                capturedEb:SetText(value)
+            end)
+        end)
+
+        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick }
     end
 
     local totalH = math.max(200, 100 + #allVars * ROW_H + 40)

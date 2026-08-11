@@ -160,7 +160,7 @@ local function OpenEditFrame(raidId, docId)
         lblText:SetPoint("TOPLEFT", editFrame, "TOPLEFT", 14, -72)
         lblText:SetText("Text:")
 
-        editTextEB, editTextBg = W.MakeEditBox(editFrame, 430, 280, true)
+        editTextEB, editTextBg = W.MakeEditBox(editFrame, 420, 300, true)
         editTextBg:SetPoint("TOPLEFT", editFrame, "TOPLEFT", 14, -90)
 
         local btnSave = W.MakeButton(editFrame, "Save", 80, 22)
@@ -170,6 +170,10 @@ local function OpenEditFrame(raidId, docId)
             local text = editTextEB:GetText()
             if name == "" then
                 print("|cffff0000PugRaid:|r Document name is required.")
+                return
+            end
+            if text == "" then
+                print("|cffff0000PugRaid:|r Document content is required.")
                 return
             end
             if editDocId then

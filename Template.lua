@@ -3,11 +3,12 @@
 
 PugRaidAssignmentsTemplate = {}
 local T = PugRaidAssignmentsTemplate
+local regex ="{{%s*([%w_]+)%s*}}"
 
 -- Replace all {{var}} occurrences in `text` with values[var].
 -- Missing vars are left as-is.
 function T.Render(text, values)
-    return (text:gsub("{{(%w+)}}", function(var)
+    return (text:gsub(regex, function(var)
         return values[var] or ("{{" .. var .. "}}")
     end))
 end

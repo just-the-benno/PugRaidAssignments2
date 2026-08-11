@@ -1,4 +1,4 @@
-## Interface: 20504
+## Interface: 20506
 ## Title: Pug Raid Assignments 2
 ## Notes: Raid assignment planning and session management for TBC Classic.
 ## Author: just-the-benno

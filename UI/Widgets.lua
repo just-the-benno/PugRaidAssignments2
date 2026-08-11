@@ -24,31 +24,56 @@ function W.MakeEditBox(parent, width, height, multiline)
     local bg = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     bg:SetSize(width or 300, height or 24)
     bg:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     bg:SetBackdropColor(0, 0, 0, 0.6)
     bg:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
-    local eb
+    -- local eb = CreateFrame("EditBox", nil, bg)
+    -- eb:SetMultiLine(multiline)
+    -- eb:SetFontObject(ChatFontNormal)
+    -- eb:SetAutoFocus(false)
+
+    -- if multiline then
+    -- 	local scroll = CreateFrame("ScrollFrame", nil, bg, "UIPanelScrollFrameTemplate")
+    -- 	scroll:SetPoint("TOPLEFT", bg, "TOPLEFT", 6, -6)
+    -- 	scroll:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -26, 6)
+    -- 	eb:SetParent(scroll)
+    -- 	eb:SetSize(width - 10, height)
+    -- 	scroll:SetScrollChild(eb)
+    -- 	eb.scrollFrame = scroll
+    -- else
+    -- 	eb:SetSize(width, height)
+    -- 	eb:SetPoint("TOPLEFT", bg, 6, -4)
+    -- 	eb:SetPoint("BOTTOMRIGHT", bg, -6, 4)
+    -- end
+
+
+    local eb = CreateFrame("EditBox", nil, bg)
+    eb:SetMultiLine(multiline)
+    eb:SetAutoFocus(false)
+    eb:EnableMouse(true)
+    eb:SetScript("OnEscapePressed", eb.ClearFocus)
+
     if multiline then
         local sf = CreateFrame("ScrollFrame", nil, bg, "UIPanelScrollFrameTemplate")
         sf:SetPoint("TOPLEFT", bg, "TOPLEFT", 4, -4)
         sf:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -20, 4)
-        eb = CreateFrame("EditBox", nil, sf)
-        eb:SetMultiLine(true)
-        eb:SetAutoFocus(false)
+        eb:SetParent(sf)
+        eb:SetSize(width - 10, height)
         eb:SetFontObject(ChatFontNormal)
-        eb:SetWidth(sf:GetWidth())
         sf:SetScrollChild(eb)
+        eb.scrollFrame = sf
     else
         eb = CreateFrame("EditBox", nil, bg)
-        eb:SetPoint("LEFT",  bg, "LEFT",  4, 0)
+        eb:SetPoint("LEFT", bg, "LEFT", 4, 0)
         eb:SetPoint("RIGHT", bg, "RIGHT", -4, 0)
-        eb:SetHeight(20)
-        eb:SetAutoFocus(false)
+        eb:SetSize(width, height)
         eb:SetFontObject(GameFontNormal)
     end
     return eb, bg
@@ -85,9 +110,9 @@ function W.OpenDropdown(anchorFrame, items, onSelect)
     UIDropDownMenu_Initialize(dd, function(self, level)
         for _, item in ipairs(items) do
             local info = UIDropDownMenu_CreateInfo()
-            info.text    = item.text
-            info.value   = item.value
-            info.func    = function(btn)
+            info.text  = item.text
+            info.value = item.value
+            info.func  = function(btn)
                 onSelect(btn.value, btn:GetText())
                 CloseDropDownMenus()
             end
@@ -106,7 +131,7 @@ function W.MakeWindow(name, title, width, height)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetFrameStrata("MEDIUM")
     f:SetToplevel(true)
     f:Hide()

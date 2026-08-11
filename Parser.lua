@@ -21,6 +21,7 @@
 
 PugRaidAssignmentsParser = {}
 local P = PugRaidAssignmentsParser
+P.REGEX = "{{%s*([%w_]+)%s*}}"
 
 -- Map from section title keywords to kinds
 local TITLE_TO_KIND = {
@@ -30,6 +31,8 @@ local TITLE_TO_KIND = {
     ["assignment"]  = "ASSIGNMENT",
     ["assignments"] = "ASSIGNMENT",
     ["personal"]    = "PERSONAL",
+    ["whisper"]     = "PERSONAL",
+    ["whispers"]    = "PERSONAL",
     ["targets"]     = "TARGETS",
     ["target"]      = "TARGETS",
 }
@@ -100,7 +103,7 @@ end
 function P.GetVariables(text)
     local vars = {}
     local seen = {}
-    for var in text:gmatch("{{(%w+)}}") do
+    for var in text:gmatch(P.REGEX) do
         if not seen[var] then
             seen[var] = true
             vars[#vars + 1] = var

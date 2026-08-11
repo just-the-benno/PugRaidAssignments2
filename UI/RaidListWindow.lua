@@ -23,6 +23,7 @@ local RAID_TYPES = {
 
 local ROW_H = 36
 local ROW_PAD = 4
+local ROW_W = 550
 
 local function ClearRows()
     for _, r in ipairs(_raidRows) do
@@ -42,7 +43,7 @@ local function RebuildList()
     local y = 0
     for _, raid in ipairs(sorted) do
         local row = CreateFrame("Frame", nil, contentFrame, "BackdropTemplate")
-        row:SetSize(460, ROW_H)
+        row:SetSize(ROW_W, ROW_H)
         row:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -y)
         row:SetBackdrop({
             bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
@@ -195,13 +196,13 @@ StaticPopupDialogs["PUGRAID_CONFIRM_START_SESSION"] = {
 
 -- ── Main window ───────────────────────────────────────────────────────────────
 local function Build()
-    frame = W.MakeWindow("PugRaidListWindow", "Raid Assignments", 500, 480)
+    frame = W.MakeWindow("PugRaidListWindow", "Raid Assignments", ROW_W + 20, 480)
 
     local btnNew = W.MakeButton(frame, "+ New Raid", 100, 24)
     btnNew:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -36)
     btnNew:SetScript("OnClick", OpenNewRaidDialog)
 
-    local sf, cf = W.MakeScrollPane(frame, 480, 400)
+    local sf, cf = W.MakeScrollPane(frame, ROW_W - 25, 400)
     sf:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -68)
     contentFrame = cf
 end
