@@ -39,7 +39,7 @@ local function RebuildCards()
     for i, doc in ipairs(docs) do
         local card = CreateFrame("Frame", nil, contentFrame, "BackdropTemplate")
         card:SetSize(CARD_W, CARD_H)
-        card:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, -y)
+        card:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 58, -y)
         card:SetBackdrop({
             bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
             edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
@@ -66,9 +66,9 @@ local function RebuildCards()
         verLabel:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -26)
         verLabel:SetText(verInfo)
 
-        -- Up / Down reorder buttons (left of card)
-        local btnUp = W.MakeButton(contentFrame, "▲", 24, 22)
-        btnUp:SetPoint("RIGHT", card, "LEFT", -4, 10)
+        -- Up / Down reorder buttons (left margin reserved for them)
+        local btnUp = W.MakeButton(contentFrame, "Up", 48, 22)
+        btnUp:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 4, -y - 4)
         btnUp:SetEnabled(i > 1)
         local capturedDoc = doc
         local capturedI   = i
@@ -81,8 +81,8 @@ local function RebuildCards()
         end)
         _docCards[#_docCards + 1] = btnUp
 
-        local btnDown = W.MakeButton(contentFrame, "▼", 24, 22)
-        btnDown:SetPoint("RIGHT", card, "LEFT", -4, -10)
+        local btnDown = W.MakeButton(contentFrame, "Down", 48, 22)
+        btnDown:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 4, -y - 30)
         btnDown:SetEnabled(i < #docs)
         btnDown:SetScript("OnClick", function()
             local sortedDocs = S.GetDocumentsSorted(currentRaidId)
