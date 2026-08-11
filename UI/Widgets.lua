@@ -70,7 +70,6 @@ function W.MakeEditBox(parent, width, height, multiline)
         sf:SetScrollChild(eb)
         eb.scrollFrame = sf
     else
-        eb = CreateFrame("EditBox", nil, bg)
         eb:SetPoint("LEFT", bg, "LEFT", 4, 0)
         eb:SetPoint("RIGHT", bg, "RIGHT", -4, 0)
         eb:SetSize(width, height)

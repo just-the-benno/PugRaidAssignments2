@@ -263,12 +263,18 @@ local function Build()
             end
         end
         local msgs = T.BuildMessages(toSend, values)
-        D.SendAll(msgs)
         -- Persist values
         for k, v in pairs(values) do
             S.SetLastValue(sess.raidId, doc.id, k, v)
         end
-        print("|cff00ff00PugRaid:|r Sent.")
+
+        if P.HasBlocks(toSend) then
+            local queue = D.BuildPresenterQueue(msgs)
+            PugRaidPresenterBar_Open(queue)
+        else
+            D.SendAll(msgs)
+            print("|cff00ff00PugRaid:|r Sent.")
+        end
     end)
 
     local btnTarget = W.MakeButton(bar, "Target", 56, 24)
