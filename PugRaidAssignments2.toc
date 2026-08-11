@@ -17,4 +17,5 @@ UI\SessionViewWindow.lua
 UI\DocumentsWindow.lua
 UI\RaidListWindow.lua
 UI\PlayerBar.lua
+UI\PresenterBar.lua
 Core.lua

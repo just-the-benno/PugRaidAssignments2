@@ -115,7 +115,9 @@ end
 -- all fire in the same instant.
 function D.SendAll(messages)
     for _, msg in ipairs(messages) do
-        if msg.kind ~= "LONG" then
+        -- PERSONAL_BLOCK_GROUP is a synthetic presenter-mode-only message;
+        -- individual PERSONAL messages already cover these whispers.
+        if msg.kind ~= "LONG" and msg.kind ~= "PERSONAL_BLOCK_GROUP" then
             D.SendMessage(msg)
         end
     end
@@ -149,25 +151,71 @@ end
 -- nothing actually goes out over the network.
 function D.Simulate(messages)
     print("|cffffff00PugRaid Simulate:|r")
+    local blockNum = 0
+    local inBlockMode = false
+
+    -- Determine if the message set uses blocks at all.
+    for _, msg in ipairs(messages) do
+        if msg.blocks or msg.kind == "PERSONAL_BLOCK_GROUP" then
+            inBlockMode = true
+            break
+        end
+    end
+
     for _, msg in ipairs(messages) do
         if msg.kind == "LONG" then
             print("|cffaaaaaa[LONG]|r")
             for _, ln in ipairs(msg.lines) do print("  " .. ln) end
         elseif msg.kind == "SHORT" then
-            for _, ln in ipairs(msg.lines) do
-                for _, chunk in ipairs(ChunkText(ln)) do
-                    print("|cffffffff[RAID]|r " .. chunk)
+            if msg.blocks then
+                for _, blk in ipairs(msg.blocks) do
+                    blockNum = blockNum + 1
+                    print("|cff888800── Block " .. blockNum .. " ──|r")
+                    for _, ln in ipairs(blk.lines) do
+                        for _, chunk in ipairs(ChunkText(ln)) do
+                            print("|cffffffff[RAID]|r " .. chunk)
+                        end
+                    end
+                end
+            else
+                for _, ln in ipairs(msg.lines) do
+                    for _, chunk in ipairs(ChunkText(ln)) do
+                        print("|cffffffff[RAID]|r " .. chunk)
+                    end
                 end
             end
         elseif msg.kind == "ASSIGNMENT" then
-            for _, ln in ipairs(msg.lines) do
-                for _, chunk in ipairs(ChunkText(ln)) do
-                    print("|cffff8800[RAID WARNING]|r " .. chunk)
+            if msg.blocks then
+                for _, blk in ipairs(msg.blocks) do
+                    blockNum = blockNum + 1
+                    print("|cff888800── Block " .. blockNum .. " ──|r")
+                    for _, ln in ipairs(blk.lines) do
+                        for _, chunk in ipairs(ChunkText(ln)) do
+                            print("|cffff8800[RAID WARNING]|r " .. chunk)
+                        end
+                    end
+                end
+            else
+                for _, ln in ipairs(msg.lines) do
+                    for _, chunk in ipairs(ChunkText(ln)) do
+                        print("|cffff8800[RAID WARNING]|r " .. chunk)
+                    end
                 end
             end
         elseif msg.kind == "PERSONAL" then
             for _, chunk in ipairs(ChunkText(msg.text)) do
                 print("|cff00ccff[WHISPER -> " .. (msg.target or "?") .. "]|r " .. chunk)
+            end
+        elseif msg.kind == "PERSONAL_BLOCK_GROUP" then
+            -- Expand whisper blocks with block markers.
+            for _, blk in ipairs(msg.blocks) do
+                blockNum = blockNum + 1
+                print("|cff888800── Block " .. blockNum .. " ──|r")
+                for _, w in ipairs(blk.whispers) do
+                    for _, chunk in ipairs(ChunkText(w.text)) do
+                        print("|cff00ccff[WHISPER -> " .. (w.target or "?") .. "]|r " .. chunk)
+                    end
+                end
             end
         end
     end
@@ -176,13 +224,114 @@ end
 -- Validate: returns a list of invalid {{var}}=value pairs where value is not a current group member.
 -- `values` is { [varName] = resolvedName }
 -- `usedVars` is the list of variable names used in PERSONAL sections (these must be roster members)
-function D.ValidateRoster(values, usedVars)
+-- `skippedVars` is an optional set { [varName] = true } — skipped vars are excluded from validation.
+function D.ValidateRoster(values, usedVars, skippedVars)
+    skippedVars = skippedVars or {}
     local invalid = {}
     for _, var in ipairs(usedVars) do
-        local val = values[var]
-        if val and val ~= "" and not PugRaidAssignmentsRoster.IsMember(val) then
-            invalid[#invalid + 1] = { var = var, value = val }
+        if not skippedVars[var] then
+            local val = values[var]
+            if val and val ~= "" and not PugRaidAssignmentsRoster.IsMember(val) then
+                invalid[#invalid + 1] = { var = var, value = val }
+            end
         end
     end
     return invalid
+end
+
+-- ── Presenter / block queue ───────────────────────────────────────────────────
+--
+-- BuildPresenterQueue takes a list of messages (from Template.BuildMessages)
+-- that already contain .blocks information (set by Parser.ApplyBlockSplitting)
+-- and returns a flat, ordered list of "block items".  Each block item is a
+-- small list of messages (or whispers) that should be sent together when the
+-- user clicks Play.  The queue is ordered by section/document order.
+--
+-- A block item has the shape:
+--   { messages = { msg, ... } }
+-- where each `msg` is something D.SendMessage understands (kind, lines/target/text).
+--
+-- Sections without .blocks get a single implicit block containing all their content.
+-- PERSONAL_BLOCK_GROUP pseudo-messages (emitted by Template when sec.blocks exists)
+-- are expanded into per-block whisper groups here.  Plain PERSONAL messages
+-- (emitted when sec.blocks is absent) fall into the single implicit block.
+function D.BuildPresenterQueue(messages)
+    local queue = {}  -- list of { messages = {} }
+
+    -- We process in document order.  We need to group by "block index" per
+    -- section, then flatten across sections.  The approach: collect all block
+    -- contributions per section, then concatenate across sections.
+
+    -- Temporary per-section block accumulators.
+    local sectionBlocks = {}  -- list of lists-of-msgs
+
+    -- State for accumulating plain (non-block) PERSONAL messages
+    -- into the section they belong to.
+    local pendingPlain = {}  -- plain messages since last PERSONAL_BLOCK_GROUP
+
+    for _, msg in ipairs(messages) do
+        if msg.kind == "PERSONAL_BLOCK_GROUP" then
+            -- Flush any preceding plain PERSONAL messages (shouldn't happen if
+            -- blocks are consistent, but be defensive).
+            pendingPlain = {}
+            -- Each block in the group becomes one block-item for this section.
+            local secBlks = {}
+            for _, blk in ipairs(msg.blocks) do
+                secBlks[#secBlks + 1] = blk.whispers  -- list of PERSONAL msgs
+            end
+            sectionBlocks[#sectionBlocks + 1] = secBlks
+        elseif msg.kind == "PERSONAL" then
+            -- Plain (non-block) PERSONAL: accumulate for a single block.
+            pendingPlain[#pendingPlain + 1] = msg
+        elseif msg.kind == "LONG" then
+            -- LONG is never sent; skip.
+        else
+            -- SHORT or ASSIGNMENT
+            if msg.blocks then
+                -- Flush any accumulated plain PERSONAL into a prior single-block section.
+                if #pendingPlain > 0 then
+                    sectionBlocks[#sectionBlocks + 1] = { pendingPlain }
+                    pendingPlain = {}
+                end
+                -- Expand blocks into per-block messages.
+                local secBlks = {}
+                for _, blk in ipairs(msg.blocks) do
+                    -- Build a sendable message for just this block's lines.
+                    secBlks[#secBlks + 1] = { { kind = msg.kind, lines = blk.lines } }
+                end
+                sectionBlocks[#sectionBlocks + 1] = secBlks
+            else
+                -- No blocks: single implicit block.
+                if #pendingPlain > 0 then
+                    sectionBlocks[#sectionBlocks + 1] = { pendingPlain }
+                    pendingPlain = {}
+                end
+                sectionBlocks[#sectionBlocks + 1] = { { msg } }
+            end
+        end
+    end
+    -- Flush any trailing plain PERSONAL.
+    if #pendingPlain > 0 then
+        sectionBlocks[#sectionBlocks + 1] = { pendingPlain }
+    end
+
+    -- Flatten: iterate block index across all sections.
+    -- Because sections can have different numbers of blocks we zip across them
+    -- sequentially, appending all section-blocks at their natural positions into
+    -- the flat queue.
+    for _, secBlks in ipairs(sectionBlocks) do
+        for _, blkMsgs in ipairs(secBlks) do
+            queue[#queue + 1] = { messages = blkMsgs }
+        end
+    end
+
+    return queue
+end
+
+-- Send all messages in a single block item from BuildPresenterQueue.
+-- Uses the same chunking+throttled pipeline as SendAll.
+function D.SendBlock(blockItem)
+    for _, msg in ipairs(blockItem.messages) do
+        D.SendMessage(msg)
+    end
 end

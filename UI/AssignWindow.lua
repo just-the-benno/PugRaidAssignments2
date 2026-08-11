@@ -10,7 +10,7 @@ local D  = PugRaidAssignmentsDispatcher
 local R  = PugRaidAssignmentsRoster
 
 local frame
-local varRows       = {}  -- { label, editBox, bgFrame, varName }
+local varRows       = {}  -- { label, editBox, bgFrame, varName, skipCheck, pickBtn }
 local sectionChecks = {}  -- { kind -> checkbox }
 local sectionsData  = {}
 local currentRaidId, currentDocId, currentMode
@@ -22,7 +22,8 @@ local function ClearVarRows()
     for _, row in ipairs(varRows) do
         row.label:Hide()
         row.bgFrame:Hide()
-        if row.pickBtn then row.pickBtn:Hide() end
+        if row.pickBtn  then row.pickBtn:Hide()  end
+        if row.skipCheck then row.skipCheck:Hide() end
     end
     varRows = {}
 end
@@ -33,6 +34,16 @@ local function CollectValues()
         values[row.varName] = row.editBox:GetText()
     end
     return values
+end
+
+local function CollectSkippedVars()
+    local skipped = {}
+    for _, row in ipairs(varRows) do
+        if row.skipCheck and row.skipCheck:GetChecked() then
+            skipped[row.varName] = true
+        end
+    end
+    return skipped
 end
 
 local function PersistValues(values)
@@ -68,9 +79,9 @@ local function BuildFilteredSections()
     return filtered
 end
 
-local function ValidateOrWarn(values)
+local function ValidateOrWarn(values, skippedVars)
     local personalVars = GetPersonalVarNames()
-    local invalid = D.ValidateRoster(values, personalVars)
+    local invalid = D.ValidateRoster(values, personalVars, skippedVars)
     if #invalid > 0 then
         print("|cffff0000PugRaid:|r Invalid roster assignments:")
         for _, pair in ipairs(invalid) do
@@ -144,7 +155,11 @@ local function Rebuild(raidId, docId, sections, mode)
             end)
         end)
 
-        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick }
+        -- Skip checkbox — always visible, unchecked by default.
+        local skipCb = W.MakeCheckbox(frame, "Skip")
+        skipCb:SetPoint("LEFT", btnPick, "RIGHT", 6, 0)
+
+        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick, skipCheck = skipCb }
     end
 
     local totalH = math.max(200, 100 + #allVars * ROW_H + 40)
@@ -152,7 +167,7 @@ local function Rebuild(raidId, docId, sections, mode)
 end
 
 local function Build()
-    frame = W.MakeWindow("PugRaidAssignWindow", "Assign", 420, 300)
+    frame = W.MakeWindow("PugRaidAssignWindow", "Assign", 500, 300)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
 
@@ -160,24 +175,33 @@ local function Build()
     local btnSend = W.MakeButton(frame, "Send", 70, 22)
     btnSend:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 10)
     btnSend:SetScript("OnClick", function()
-        local values = CollectValues()
-        if not ValidateOrWarn(values) then return end
-        local filtered = BuildFilteredSections()
-        local messages = T.BuildMessages(filtered, values)
-        D.SendAll(messages)
+        local values     = CollectValues()
+        local skipped    = CollectSkippedVars()
+        if not ValidateOrWarn(values, skipped) then return end
+        local filtered   = BuildFilteredSections()
+        local messages   = T.BuildMessages(filtered, values, skipped)
         PersistValues(values)
-        print("|cff00ff00PugRaid:|r Sent.")
+
+        if P.HasBlocks(filtered) then
+            -- Presenter mode: build block queue and open the Presenter Bar.
+            local queue = D.BuildPresenterQueue(messages)
+            PugRaidPresenterBar_Open(queue)
+        else
+            D.SendAll(messages)
+            print("|cff00ff00PugRaid:|r Sent.")
+        end
     end)
 
     local btnSim = W.MakeButton(frame, "Simulate", 80, 22)
     btnSim:SetPoint("LEFT", btnSend, "RIGHT", 6, 0)
     btnSim:SetScript("OnClick", function()
-        local values = CollectValues()
+        local values  = CollectValues()
+        local skipped = CollectSkippedVars()
         if currentMode == "SESSION" then
-            if not ValidateOrWarn(values) then return end
+            if not ValidateOrWarn(values, skipped) then return end
         end
         local filtered = BuildFilteredSections()
-        local messages = T.BuildMessages(filtered, values)
+        local messages = T.BuildMessages(filtered, values, skipped)
         D.Simulate(messages)
     end)
 

@@ -16,24 +16,99 @@ end
 -- Build outgoing messages for each section kind given sections and values.
 -- Returns a list of { kind, text } where kind is "LONG","SHORT","ASSIGNMENT","PERSONAL","TARGETS"
 -- PERSONAL entries have { kind="PERSONAL", target=varValue, text=renderedText }
-function T.BuildMessages(sections, values)
+--
+-- skippedVars: optional set of { [varName] = true } for variables whose Skip
+--   checkbox is checked in the Assign window.
+--   • For SHORT/ASSIGNMENT sections: a skipped variable's placeholder is
+--     substituted with "NOT FOUND!" so the raid sees a deliberately jarring
+--     marker rather than a raw {{var}} token.
+--   • For PERSONAL sections: any whisper line whose target resolves to a
+--     skipped variable is dropped entirely (to avoid a "no player found" error
+--     from SendChatMessage with a literal "NOT FOUND!" as the target).
+--
+-- Block-aware: if sections carry .blocks (from Parser.ApplyBlockSplitting),
+-- each returned message also carries .blocks = { {lines={}}, ... } (or
+-- .blocks = { {whispers={}}, ... } for PERSONAL) so the Presenter Bar can
+-- send one block at a time.
+function T.BuildMessages(sections, values, skippedVars)
+    skippedVars = skippedVars or {}
+
+    -- Build an effective values table where skipped vars render as "NOT FOUND!"
+    -- for non-PERSONAL sections.
+    local skippedValues = setmetatable({}, {
+        __index = function(_, k)
+            if skippedVars[k] then return "NOT FOUND!" end
+            return values[k]
+        end
+    })
+
     local messages = {}
     for _, sec in ipairs(sections) do
         if sec.kind == "LONG" or sec.kind == "SHORT" or sec.kind == "ASSIGNMENT" then
             local rendered = {}
             for _, ln in ipairs(sec.lines) do
-                rendered[#rendered + 1] = T.Render(ln, values)
+                rendered[#rendered + 1] = T.Render(ln, skippedValues)
             end
-            messages[#messages + 1] = { kind = sec.kind, lines = rendered }
+            local msg = { kind = sec.kind, lines = rendered }
+            -- Propagate block structure if present.
+            if sec.blocks then
+                msg.blocks = {}
+                for _, blk in ipairs(sec.blocks) do
+                    local blkLines = {}
+                    for _, ln in ipairs(blk.lines) do
+                        blkLines[#blkLines + 1] = T.Render(ln, skippedValues)
+                    end
+                    msg.blocks[#msg.blocks + 1] = { lines = blkLines }
+                end
+            end
+            messages[#messages + 1] = msg
         elseif sec.kind == "PERSONAL" then
             -- Each line: "{{PlayerVar}}: message text" or "PlayerName: message text"
+            -- Collect whispers in block-aware fashion if blocks are present.
+            local allWhispers = {}
             for _, ln in ipairs(sec.lines) do
                 local target, msg = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
                 if target and msg then
-                    local resolvedTarget = T.Render(target, values)
-                    local resolvedMsg    = T.Render(msg, values)
-                    messages[#messages + 1] = { kind = "PERSONAL", target = resolvedTarget, text = resolvedMsg }
+                    -- Check if this line's target variable is skipped.
+                    local rawVar = target:match("{{(%w+)}}")
+                    if rawVar and skippedVars[rawVar] then
+                        -- Omit: do not whisper a "NOT FOUND!" target.
+                    else
+                        local resolvedTarget = T.Render(target, values)
+                        local resolvedMsg    = T.Render(msg, values)
+                        allWhispers[#allWhispers + 1] = { kind = "PERSONAL", target = resolvedTarget, text = resolvedMsg }
+                    end
                 end
+            end
+            -- Add individual whisper messages to the output.
+            for _, w in ipairs(allWhispers) do
+                messages[#messages + 1] = w
+            end
+
+            -- Also propagate block structure for PERSONAL if present.
+            if sec.blocks then
+                -- Build a block-level whisper grouping message (used by Presenter Bar).
+                -- We emit a synthetic "PERSONAL_BLOCK_GROUP" so the bar knows which
+                -- whispers belong to which block.  The individual messages above are
+                -- used by the non-presenter send path; the block group is only used
+                -- by the presenter path.
+                local blockGroups = {}
+                for _, blk in ipairs(sec.blocks) do
+                    local blkWhispers = {}
+                    for _, ln in ipairs(blk.lines) do
+                        local target, msg = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
+                        if target and msg then
+                            local rawVar = target:match("{{(%w+)}}")
+                            if not (rawVar and skippedVars[rawVar]) then
+                                local rt = T.Render(target, values)
+                                local rm = T.Render(msg, values)
+                                blkWhispers[#blkWhispers + 1] = { kind = "PERSONAL", target = rt, text = rm }
+                            end
+                        end
+                    end
+                    blockGroups[#blockGroups + 1] = { whispers = blkWhispers }
+                end
+                messages[#messages + 1] = { kind = "PERSONAL_BLOCK_GROUP", blocks = blockGroups }
             end
         end
         -- TARGETS sections are not broadcast as chat messages
