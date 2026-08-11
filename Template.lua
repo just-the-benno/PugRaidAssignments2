@@ -3,7 +3,8 @@
 
 PugRaidAssignmentsTemplate = {}
 local T = PugRaidAssignmentsTemplate
-local regex ="{{%s*([%w_]+)%s*}}"
+local P = PugRaidAssignmentsParser
+local regex = "{{%s*([%w_]+)%s*}}"
 
 -- Replace all {{var}} occurrences in `text` with values[var].
 -- Missing vars are left as-is.
@@ -24,7 +25,10 @@ end
 --     marker rather than a raw {{var}} token.
 --   • For PERSONAL sections: any whisper line whose target resolves to a
 --     skipped variable is dropped entirely (to avoid a "no player found" error
---     from SendChatMessage with a literal "NOT FOUND!" as the target).
+--     from SendChatMessage with a literal "NOT FOUND!" as the target). Any
+--     OTHER {{var}} reference inside a whisper's message body (not just its
+--     target) is also substituted with "NOT FOUND!" if skipped, matching
+--     SHORT/ASSIGNMENT behavior for consistency.
 --
 -- Block-aware: if sections carry .blocks (from Parser.ApplyBlockSplitting),
 -- each returned message also carries .blocks = { {lines={}}, ... } (or
@@ -34,7 +38,7 @@ function T.BuildMessages(sections, values, skippedVars)
     skippedVars = skippedVars or {}
 
     -- Build an effective values table where skipped vars render as "NOT FOUND!"
-    -- for non-PERSONAL sections.
+    -- for non-PERSONAL sections (and for whisper message bodies below).
     local skippedValues = setmetatable({}, {
         __index = function(_, k)
             if skippedVars[k] then return "NOT FOUND!" end
@@ -70,12 +74,16 @@ function T.BuildMessages(sections, values, skippedVars)
                 local target, msg = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
                 if target and msg then
                     -- Check if this line's target variable is skipped.
-                    local rawVar = target:match("{{(%w+)}}")
+                    -- Use the shared PugRaidAssignmentsParser regex so
+                    -- "{{ tank3 }}" (with internal whitespace, as authors
+                    -- commonly write it) is recognized the same way
+                    -- everywhere else in the codebase.
+                    local rawVar = target:match(P.REGEX)
                     if rawVar and skippedVars[rawVar] then
                         -- Omit: do not whisper a "NOT FOUND!" target.
                     else
-                        local resolvedTarget = T.Render(target, values)
-                        local resolvedMsg    = T.Render(msg, values)
+                        local resolvedTarget = T.Render(target, skippedValues)
+                        local resolvedMsg    = T.Render(msg, skippedValues)
                         allWhispers[#allWhispers + 1] = { kind = "PERSONAL", target = resolvedTarget, text = resolvedMsg }
                     end
                 end
@@ -98,10 +106,10 @@ function T.BuildMessages(sections, values, skippedVars)
                     for _, ln in ipairs(blk.lines) do
                         local target, msg = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
                         if target and msg then
-                            local rawVar = target:match("{{(%w+)}}")
+                            local rawVar = target:match(P.REGEX)
                             if not (rawVar and skippedVars[rawVar]) then
-                                local rt = T.Render(target, values)
-                                local rm = T.Render(msg, values)
+                                local rt = T.Render(target, skippedValues)
+                                local rm = T.Render(msg, skippedValues)
                                 blkWhispers[#blkWhispers + 1] = { kind = "PERSONAL", target = rt, text = rm }
                             end
                         end

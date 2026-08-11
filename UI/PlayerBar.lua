@@ -47,14 +47,15 @@ local function RebuildChecklist(sess, doc)
     local sections = P.Parse(ver.text)
     local targets  = P.GetTargets(sections)
     local tp       = S.GetTargetProgress(sess, doc.id)
-
     local rowH = 20
     local y = -4
     for i, entry in ipairs(targets) do
+        
+
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
         local iconName = PugRaidAssignmentsParser.ICON_NAMES[entry.iconIndex] or ("rt"..entry.iconIndex)
-        iconLbl:SetText(entry.mobName .. " → " .. iconName)
+        iconLbl:SetText(entry.mobName .. " --> " .. iconName)
         iconLbl:SetWidth(240)
 
         local statusLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")

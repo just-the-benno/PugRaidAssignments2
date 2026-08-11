@@ -12,7 +12,9 @@
 --   Label  — shows "Block N / Total" position indicator.
 --
 -- The bar closes automatically once Play advances past the last block or
--- Eject is triggered.  No SavedVariables state is stored for block position.
+-- Eject is triggered.  No SavedVariables state is stored for block position,
+-- but the bar's on-screen POSITION is persisted (same pattern as PlayerBar's
+-- playerBarPos) so it reopens in the same place next time.
 
 local W = PugRaidAssignmentsWidgets
 local D = PugRaidAssignmentsDispatcher
@@ -22,12 +24,12 @@ local lblPos             -- "Block N / Total" label
 local presQueue = {}     -- flat list of block items from D.BuildPresenterQueue
 local presIndex = 0      -- current pointer (0 = nothing sent yet; 1 = first block sent)
 
--- ── Helpers ───────────────────────────────────────────────────────────────────
+-- ── Helpers ──────────────────────────────────────────────────────────────
 
 local function UpdateLabel()
     if lblPos then
         if #presQueue == 0 then
-            lblPos:SetText("Block — / —")
+            lblPos:SetText("Block - / -")
         else
             lblPos:SetText("Block " .. presIndex .. " / " .. #presQueue)
         end
@@ -40,7 +42,7 @@ local function ClosePresenterBar()
     if presBar then presBar:Hide() end
 end
 
--- ── Button handlers ───────────────────────────────────────────────────────────
+-- ── Button handlers ────────────────────────────────────────────────────────
 
 local function OnPlay()
     if #presQueue == 0 then return end
@@ -85,7 +87,7 @@ local function OnCancel()
     ClosePresenterBar()
 end
 
--- ── Build ─────────────────────────────────────────────────────────────────────
+-- ── Build ────────────────────────────────────────────────────────────────
 
 local function Build()
     presBar = CreateFrame("Frame", "PugRaidPresenterBar", UIParent, "BackdropTemplate")
@@ -103,38 +105,54 @@ local function Build()
     presBar:EnableMouse(true)
     presBar:RegisterForDrag("LeftButton")
     presBar:SetScript("OnDragStart", presBar.StartMoving)
-    presBar:SetScript("OnDragStop", presBar.StopMovingOrSizing)
     presBar:SetFrameStrata("HIGH")
     presBar:SetToplevel(true)
     presBar:Hide()
 
-    local btnPlay = W.MakeButton(presBar, "▶ Play", 72, 24)
+    -- Restore saved position (same pattern as PlayerBar's playerBarPos).
+    if PugRaidAssignmentsDB and PugRaidAssignmentsDB.presenterBarPos then
+        local pos = PugRaidAssignmentsDB.presenterBarPos
+        presBar:ClearAllPoints()
+        presBar:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y)
+    end
+    presBar:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local point, _, relPoint, x, y = self:GetPoint()
+        if PugRaidAssignmentsDB then
+            PugRaidAssignmentsDB.presenterBarPos = { point = point, relPoint = relPoint, x = x, y = y }
+        end
+    end)
+
+    -- NOTE: WoW's default UI font does not render most Unicode symbol
+    -- glyphs (▶ ◀ ↺ ⏩ ✕ show up blank/missing in-game). Use plain ASCII
+    -- button labels instead.
+    local btnPlay = W.MakeButton(presBar, "Play", 60, 24)
     btnPlay:SetPoint("LEFT", presBar, "LEFT", 4, 0)
     btnPlay:SetScript("OnClick", OnPlay)
 
-    local btnRepeat = W.MakeButton(presBar, "↺ Repeat", 80, 24)
+    local btnRepeat = W.MakeButton(presBar, "Repeat", 70, 24)
     btnRepeat:SetPoint("LEFT", btnPlay, "RIGHT", 4, 0)
     btnRepeat:SetScript("OnClick", OnRepeat)
 
-    local btnBack = W.MakeButton(presBar, "◀ Back", 68, 24)
+    local btnBack = W.MakeButton(presBar, "Back", 60, 24)
     btnBack:SetPoint("LEFT", btnRepeat, "RIGHT", 4, 0)
     btnBack:SetScript("OnClick", OnBack)
 
     lblPos = presBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     lblPos:SetPoint("LEFT", btnBack, "RIGHT", 10, 0)
     lblPos:SetWidth(100)
-    lblPos:SetText("Block — / —")
+    lblPos:SetText("Block - / -")
 
-    local btnEject = W.MakeButton(presBar, "⏩ Eject", 72, 24)
+    local btnEject = W.MakeButton(presBar, "Eject", 60, 24)
     btnEject:SetPoint("LEFT", lblPos, "RIGHT", 10, 0)
     btnEject:SetScript("OnClick", OnEject)
 
-    local btnCancel = W.MakeButton(presBar, "✕ Cancel", 72, 24)
+    local btnCancel = W.MakeButton(presBar, "Cancel", 70, 24)
     btnCancel:SetPoint("LEFT", btnEject, "RIGHT", 4, 0)
     btnCancel:SetScript("OnClick", OnCancel)
 end
 
--- ── Public API ────────────────────────────────────────────────────────────────
+-- ── Public API ──────────────────────────────────────────────────────────
 
 -- Open the Presenter Bar with a block queue from D.BuildPresenterQueue.
 -- If the queue is empty (no blocks to send) the bar is not shown.
@@ -148,7 +166,7 @@ function PugRaidPresenterBar_Open(queue)
     presBar:Show()
     presBar:Raise()
 
-    print("|cffffff00PugRaid Presenter:|r " .. #presQueue .. " block(s) queued. Click ▶ Play to begin.")
+    print("|cffffff00PugRaid Presenter:|r " .. #presQueue .. " block(s) queued. Click Play to begin.")
 end
 
 function PugRaidPresenterBar_Close()

@@ -34,25 +34,6 @@ function W.MakeEditBox(parent, width, height, multiline)
     bg:SetBackdropColor(0, 0, 0, 0.6)
     bg:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
-    -- local eb = CreateFrame("EditBox", nil, bg)
-    -- eb:SetMultiLine(multiline)
-    -- eb:SetFontObject(ChatFontNormal)
-    -- eb:SetAutoFocus(false)
-
-    -- if multiline then
-    -- 	local scroll = CreateFrame("ScrollFrame", nil, bg, "UIPanelScrollFrameTemplate")
-    -- 	scroll:SetPoint("TOPLEFT", bg, "TOPLEFT", 6, -6)
-    -- 	scroll:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -26, 6)
-    -- 	eb:SetParent(scroll)
-    -- 	eb:SetSize(width - 10, height)
-    -- 	scroll:SetScrollChild(eb)
-    -- 	eb.scrollFrame = scroll
-    -- else
-    -- 	eb:SetSize(width, height)
-    -- 	eb:SetPoint("TOPLEFT", bg, 6, -4)
-    -- 	eb:SetPoint("BOTTOMRIGHT", bg, -6, 4)
-    -- end
-
 
     local eb = CreateFrame("EditBox", nil, bg)
     eb:SetMultiLine(multiline)

@@ -40,14 +40,26 @@ local TITLE_TO_KIND = {
 -- Map rt<N> token to SetRaidTarget numeric index.
 -- Star=1, Circle=2, Diamond=3, Triangle=4, Moon=5, Square=6, Cross=7, Skull=8
 local RT_TOKEN_TO_INDEX = {
-    rt1 = 1, rt2 = 2, rt3 = 3, rt4 = 4,
-    rt5 = 5, rt6 = 6, rt7 = 7, rt8 = 8,
+    rt1 = 1,
+    rt2 = 2,
+    rt3 = 3,
+    rt4 = 4,
+    rt5 = 5,
+    rt6 = 6,
+    rt7 = 7,
+    rt8 = 8,
 }
 
 -- Icon index to display name (for UI labels)
 P.ICON_NAMES = {
-    [1] = "Star",    [2] = "Circle",   [3] = "Diamond", [4] = "Triangle",
-    [5] = "Moon",    [6] = "Square",   [7] = "Cross",   [8] = "Skull",
+    [1] = "Star",
+    [2] = "Circle",
+    [3] = "Diamond",
+    [4] = "Triangle",
+    [5] = "Moon",
+    [6] = "Square",
+    [7] = "Cross",
+    [8] = "Skull",
 }
 
 -- Block-splitting: a document may contain lines with exactly "!! END OF BLOCK !!"
@@ -110,12 +122,14 @@ function P.Parse(text)
     for _, sec in ipairs(sections) do
         if sec.kind == "TARGETS" then
             for _, ln in ipairs(sec.lines) do
-                -- Format: "MobName: rt<N>"  (whitespace-forgiving)
-                local mob, token = ln:match("^%s*(.-)%s*:%s*(rt%d+)%s*$")
-                if mob and mob ~= "" and token then
-                    local idx = RT_TOKEN_TO_INDEX[token:lower()]
-                    if idx then
-                        sec.targets[#sec.targets + 1] = { mobName = mob, iconIndex = idx }
+                -- capture mob name and the rest (token list)
+                local mob, tokenList = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
+                if mob and mob ~= "" and tokenList then
+                    for token in tokenList:gmatch("(rt%d+)") do
+                        local idx = RT_TOKEN_TO_INDEX[token:lower()]
+                        if idx then
+                            sec.targets[#sec.targets + 1] = { mobName = mob, iconIndex = idx }
+                        end
                     end
                 end
             end
@@ -172,7 +186,9 @@ ApplyBlockSplitting = function(sections)
             for _, blk in ipairs(sec.blocks) do
                 local hasContent = false
                 for _, ln in ipairs(blk.lines) do
-                    if not ln:match("^%s*$") then hasContent = true; break end
+                    if not ln:match("^%s*$") then
+                        hasContent = true; break
+                    end
                 end
                 if hasContent then pruned[#pruned + 1] = blk end
             end
