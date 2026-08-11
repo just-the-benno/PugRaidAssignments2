@@ -61,9 +61,9 @@ local function RebuildChecklist(sess, doc)
         local statusLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         statusLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 250, y - (i-1)*rowH)
         if tp.assignedIcons[entry.iconIndex] then
-            statusLbl:SetText("|cff00ff00✓|r")
+            statusLbl:SetText("|cff00ff00[Done]|r")
         else
-            statusLbl:SetText("|cffff0000✗|r")
+            statusLbl:SetText("|cffff0000[Missing]|r")
         end
 
         checklistRows[#checklistRows + 1] = { icon = iconLbl, status = statusLbl }
@@ -105,6 +105,58 @@ local function RefreshBar()
 end
 
 -- ── Build ─────────────────────────────────────────────────────────────────────
+
+-- Shared target-action logic used by both btnTarget's OnClick and the keybinding.
+local function DoTargetAction()
+    local sess, raid = GetActiveSessionAndRaid()
+    local doc = GetCurrentDoc(sess, raid)
+    if not doc then
+        -- No doc: just open the panel if not already shown.
+        if not _isExpanded then ShowChecklist(true) end
+        return
+    end
+
+    if not _isExpanded then
+        -- First click: open the checklist panel.
+        ShowChecklist(true)
+        return
+    end
+
+    -- Panel already open: attempt to mark current target.
+    local targetName = UnitName("target")
+    if targetName then
+        local ver      = S.GetLatestVersion(sess.raidId, doc.id)
+        local sections = ver and P.Parse(ver.text) or {}
+        local targets  = P.GetTargets(sections)
+        local tp       = S.GetTargetProgress(sess, doc.id)
+
+        for _, entry in ipairs(targets) do
+            if entry.mobName:lower() == targetName:lower() and not tp.assignedIcons[entry.iconIndex] then
+                if D.MarkTarget(entry.iconIndex) then
+                    S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+                end
+                break
+            end
+        end
+
+        -- Re-fetch only the progress table (version text / targets list unchanged).
+        -- Auto-close if all targets are now marked; otherwise refresh the display.
+        local tp2 = S.GetTargetProgress(sess, doc.id)
+        local allDone = #targets > 0
+        for _, entry in ipairs(targets) do
+            if not tp2.assignedIcons[entry.iconIndex] then
+                allDone = false
+                break
+            end
+        end
+        if allDone then
+            ShowChecklist(false)
+        else
+            RebuildChecklist(sess, doc)
+        end
+    end
+    -- Do NOT close the panel on subsequent clicks.
+end
 
 local function Build()
     bar = CreateFrame("Frame", "PugRaidPlayerBar", UIParent, "BackdropTemplate")
@@ -189,7 +241,8 @@ local function Build()
         for var in pairs(doc.lastValues or {}) do
             values[var] = S.GetLastValue(sess.raidId, doc.id, var)
         end
-        local msgs = T.BuildMessages(sections, values)
+        local skippedVars = S.GetSkippedVars(sess, doc.id)
+        local msgs = T.BuildMessages(sections, values, skippedVars)
         -- SESSION mode: validate first
         local personalVars = {}
         for _, sec in ipairs(sections) do
@@ -203,7 +256,7 @@ local function Build()
                 end
             end
         end
-        local invalid = D.ValidateRoster(values, personalVars)
+        local invalid = D.ValidateRoster(values, personalVars, skippedVars)
         if #invalid > 0 then
             print("|cffff0000PugRaid:|r Invalid roster assignments:")
             for _, pair in ipairs(invalid) do
@@ -235,6 +288,7 @@ local function Build()
         end
 
         -- Validate
+        local skippedVars = S.GetSkippedVars(sess, doc.id)
         local personalVars = {}
         for _, sec in ipairs(sections) do
             if sec.kind == "PERSONAL" then
@@ -247,12 +301,16 @@ local function Build()
                 end
             end
         end
-        local invalid = D.ValidateRoster(values, personalVars)
+        local invalid = D.ValidateRoster(values, personalVars, skippedVars)
         if #invalid > 0 then
-            print("|cffff0000PugRaid:|r Invalid roster assignments:")
+            print("|cffff0000PugRaid:|r Can't send — invalid roster assignment(s):")
+            local failingVars = {}
             for _, pair in ipairs(invalid) do
-                print("  {{" .. pair.var .. "}} = " .. pair.value)
+                print("  {{" .. pair.var .. "}} = \"" .. pair.value .. "\"")
+                failingVars[#failingVars + 1] = pair.var
             end
+            print("Opening Assign window so you can fix or skip them.")
+            PugRaidAssignmentsAssignWindow_Open(sess.raidId, doc.id, sections, "SESSION", failingVars)
             return
         end
 
@@ -263,7 +321,7 @@ local function Build()
                 toSend[#toSend + 1] = sec
             end
         end
-        local msgs = T.BuildMessages(toSend, values)
+        local msgs = T.BuildMessages(toSend, values, skippedVars)
         -- Persist values
         for k, v in pairs(values) do
             S.SetLastValue(sess.raidId, doc.id, k, v)
@@ -280,34 +338,7 @@ local function Build()
 
     local btnTarget = W.MakeButton(bar, "Target", 56, 24)
     btnTarget:SetPoint("LEFT", btnSend, "RIGHT", 4, 0)
-    btnTarget:SetScript("OnClick", function()
-        local sess, raid = GetActiveSessionAndRaid()
-        local doc = GetCurrentDoc(sess, raid)
-        if not doc then ShowChecklist(not _isExpanded) return end
-
-        -- Try to mark the current target
-        local targetName = UnitName("target")
-        if targetName then
-            local ver = S.GetLatestVersion(sess.raidId, doc.id)
-            local sections = ver and P.Parse(ver.text) or {}
-            local targets  = P.GetTargets(sections)
-            local tp       = S.GetTargetProgress(sess, doc.id)
-
-            local marked = false
-            for _, entry in ipairs(targets) do
-                if entry.mobName:lower() == targetName:lower() and not tp.assignedIcons[entry.iconIndex] then
-                    if D.MarkTarget(entry.iconIndex) then
-                        S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
-                        marked = true
-                    end
-                    break
-                end
-            end
-        end
-
-        -- Toggle checklist
-        ShowChecklist(not _isExpanded)
-    end)
+    btnTarget:SetScript("OnClick", DoTargetAction)
 
     local btnEnd = W.MakeButton(bar, "End", 44, 24)
     btnEnd:SetPoint("LEFT", btnTarget, "RIGHT", 4, 0)
@@ -345,6 +376,12 @@ local function Build()
         S.ResetTargetProgress(sess, doc.id)
         RebuildChecklist(sess, doc)
     end)
+
+    local btnCloseChecklist = W.MakeButton(checklistPanel, "Close", 60, 20)
+    btnCloseChecklist:SetPoint("RIGHT", btnReset, "LEFT", -4, 0)
+    btnCloseChecklist:SetScript("OnClick", function()
+        ShowChecklist(false)
+    end)
 end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
@@ -365,4 +402,10 @@ end
 
 function PugRaidPlayerBar_IsShown()
     return bar and bar:IsShown()
+end
+
+-- Called by the PUGRAIDTARGET keybinding — same logic as clicking the Target button.
+function PugRaidPlayerBar_OnTargetKey()
+    if not (bar and bar:IsShown()) then return end
+    DoTargetAction()
 end

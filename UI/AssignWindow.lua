@@ -92,11 +92,14 @@ local function ValidateOrWarn(values, skippedVars)
     return true
 end
 
-local function Rebuild(raidId, docId, sections, mode)
+local function Rebuild(raidId, docId, sections, mode, highlightVars)
     currentRaidId = raidId
     currentDocId  = docId
     currentMode   = mode or "AUTHOR"
     sectionsData  = sections
+
+    -- In SESSION mode, retrieve the persisted skip state for this doc.
+    local sess = (currentMode == "SESSION") and S.GetActiveSession() or nil
 
     -- Section checkboxes
     for _, cb in pairs(sectionChecks) do cb:Hide() end
@@ -124,6 +127,12 @@ local function Rebuild(raidId, docId, sections, mode)
         return lines
     end)(), "\n"))
 
+    -- Normalize highlightVars to a set for O(1) lookup.
+    local highlightSet = {}
+    if highlightVars then
+        for _, v in ipairs(highlightVars) do highlightSet[v] = true end
+    end
+
     local startY = -80
     for i, var in ipairs(allVars) do
         local y = startY - (i - 1) * ROW_H
@@ -135,6 +144,12 @@ local function Rebuild(raidId, docId, sections, mode)
 
         local eb, bg = W.MakeEditBox(frame, 190, 22, false)
         bg:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_W + 16, y + 1)
+
+        -- Highlight rows for variables that just failed validation.
+        if highlightSet[var] then
+            bg:SetBackdropBorderColor(1, 0.2, 0.2, 1)
+            bg:SetBackdropColor(0.4, 0.05, 0.05, 0.9)
+        end
 
         -- Prefill from lastValues
         local lastVal = S.GetLastValue(raidId, docId, var)
@@ -155,9 +170,20 @@ local function Rebuild(raidId, docId, sections, mode)
             end)
         end)
 
-        -- Skip checkbox — always visible, unchecked by default.
+        -- Skip checkbox: in SESSION mode, initialize from persisted state and
+        -- persist any change immediately.  In AUTHOR mode, ephemeral/local only.
         local skipCb = W.MakeCheckbox(frame, "Skip")
         skipCb:SetPoint("LEFT", btnPick, "RIGHT", 6, 0)
+
+        if sess then
+            -- SESSION mode: load initial state from session.
+            local skipped = S.GetSkippedVars(sess, docId)
+            skipCb:SetChecked(skipped[var] == true)
+            local capturedVar = var
+            skipCb:SetScript("OnClick", function(self)
+                S.SetVarSkipped(sess, docId, capturedVar, self:GetChecked())
+            end)
+        end
 
         varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick, skipCheck = skipCb }
     end
@@ -220,9 +246,10 @@ end
 
 -- Open the Assign window.
 -- mode: "AUTHOR" or "SESSION"
-function PugRaidAssignmentsAssignWindow_Open(raidId, docId, sections, mode)
+-- highlightVars: optional list of variable names to visually highlight (e.g. failed validation)
+function PugRaidAssignmentsAssignWindow_Open(raidId, docId, sections, mode, highlightVars)
     if not frame then Build() end
-    Rebuild(raidId, docId, sections, mode)
+    Rebuild(raidId, docId, sections, mode, highlightVars)
     frame:Show()
     frame:Raise()
 end
