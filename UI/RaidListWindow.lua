@@ -89,6 +89,7 @@ local function RebuildList()
                     { newRaidId = capturedRaid.id, activeSession = active })
             else
                 S.CreateSession(capturedRaid.id)
+                LoggingCombat(true)
                 PugRaidPlayerBar_Open()
             end
         end)
@@ -185,7 +186,9 @@ StaticPopupDialogs["PUGRAID_CONFIRM_START_SESSION"] = {
     button2        = "Cancel",
     OnAccept       = function(self, data)
         S.EndSession(data.activeSession)
+        LoggingCombat(false)
         S.CreateSession(data.newRaidId)
+        LoggingCombat(true)
         PugRaidPlayerBar_Open()
     end,
     timeout        = 0,

@@ -1,6 +1,16 @@
 -- Core.lua
 -- Addon entry point: event handling, slash commands, minimap button.
 
+-- ── Keybinding globals ────────────────────────────────────────────────────────
+-- These must be set as globals so the Key Bindings UI can read them.
+BINDING_HEADER_PUGRAID2    = "Pug Raid Assignments 2"
+BINDING_NAME_PUGRAIDTARGET = "Mark/Open Target Checklist"
+
+-- Global function invoked by the PUGRAIDTARGET keybinding.
+function PUGRAIDTARGET()
+    PugRaidPlayerBar_OnTargetKey()
+end
+
 local ADDON_NAME = "PugRaidAssignments2"
 
 local coreFrame = CreateFrame("Frame")
@@ -11,6 +21,10 @@ coreFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         PugRaidAssignmentsStorage.Init()
         PugRaidAssignmentsCore_BuildMinimapButton()
+        local active = PugRaidAssignmentsStorage.GetActiveSession()
+        if active then
+            PugRaidPlayerBar_Open()
+        end
 
     elseif event == "PLAYER_LOGOUT" then
         -- Touch the active session so "lastSeenAt" is set (used as fallback end time)

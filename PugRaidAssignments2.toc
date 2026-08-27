@@ -4,6 +4,7 @@
 ## Author: just-the-benno
 ## Version: 2.0.0
 ## SavedVariables: PugRaidAssignmentsDB
+## Bindings: Bindings.xml
 
 Storage.lua
 Roster.lua

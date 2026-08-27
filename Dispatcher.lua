@@ -228,10 +228,32 @@ end
 function D.ValidateRoster(values, usedVars, skippedVars)
     skippedVars = skippedVars or {}
     local invalid = {}
-    for _, var in ipairs(usedVars) do
+    for temp, var in ipairs(usedVars) do
         if not skippedVars[var] then
             local val = values[var]
             if val and val ~= "" and not PugRaidAssignmentsRoster.IsMember(val) then
+                invalid[#invalid + 1] = { var = var, value = val }
+            end
+        end
+    end
+
+    for var, value in pairs(usedVars) do
+        if not skippedVars[var] then
+            local val = value
+            if val == nil or val == "" then
+                invalid[#invalid + 1] = { var = var, value = "<EMPTY>" }
+            elseif val and val ~= "" and not PugRaidAssignmentsRoster.IsMember(val) then
+                invalid[#invalid + 1] = { var = var, value = val }
+            end
+        end
+    end
+
+    for var, value in pairs(values) do
+        if not skippedVars[var] then
+            local val = value
+            if val == nil or val == "" then
+                invalid[#invalid + 1] = { var = var, value = "<EMPTY>" }
+            elseif val and val ~= "" and not PugRaidAssignmentsRoster.IsMember(val) then
                 invalid[#invalid + 1] = { var = var, value = val }
             end
         end
@@ -256,18 +278,18 @@ end
 -- are expanded into per-block whisper groups here.  Plain PERSONAL messages
 -- (emitted when sec.blocks is absent) fall into the single implicit block.
 function D.BuildPresenterQueue(messages)
-    local queue = {}  -- list of { messages = {} }
+    local queue = {} -- list of { messages = {} }
 
     -- We process in document order.  We need to group by "block index" per
     -- section, then flatten across sections.  The approach: collect all block
     -- contributions per section, then concatenate across sections.
 
     -- Temporary per-section block accumulators.
-    local sectionBlocks = {}  -- list of lists-of-msgs
+    local sectionBlocks = {} -- list of lists-of-msgs
 
     -- State for accumulating plain (non-block) PERSONAL messages
     -- into the section they belong to.
-    local pendingPlain = {}  -- plain messages since last PERSONAL_BLOCK_GROUP
+    local pendingPlain = {} -- plain messages since last PERSONAL_BLOCK_GROUP
 
     for _, msg in ipairs(messages) do
         if msg.kind == "PERSONAL_BLOCK_GROUP" then
@@ -277,7 +299,7 @@ function D.BuildPresenterQueue(messages)
             -- Each block in the group becomes one block-item for this section.
             local secBlks = {}
             for _, blk in ipairs(msg.blocks) do
-                secBlks[#secBlks + 1] = blk.whispers  -- list of PERSONAL msgs
+                secBlks[#secBlks + 1] = blk.whispers -- list of PERSONAL msgs
             end
             sectionBlocks[#sectionBlocks + 1] = secBlks
         elseif msg.kind == "PERSONAL" then

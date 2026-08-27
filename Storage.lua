@@ -226,3 +226,27 @@ end
 function S.ResetTargetProgress(session, docId)
     session.targetProgress[docId] = { assignedIcons = {} }
 end
+
+-- ── Skip State ────────────────────────────────────────────────────────────────
+
+-- Returns (and lazily initializes) the skip set for a given doc in a session.
+-- Shape: { [varName] = true }
+function S.GetSkippedVars(session, docId)
+    if not session.skippedVars then
+        session.skippedVars = {}
+    end
+    if not session.skippedVars[docId] then
+        session.skippedVars[docId] = {}
+    end
+    return session.skippedVars[docId]
+end
+
+-- Sets or clears a single variable's skip flag for a given doc in a session.
+function S.SetVarSkipped(session, docId, varName, isSkipped)
+    local set = S.GetSkippedVars(session, docId)
+    if isSkipped then
+        set[varName] = true
+    else
+        set[varName] = nil
+    end
+end
