@@ -2,27 +2,27 @@
 -- Variable assignment form: shows {{var}} rows, Send/Simulate/SaveDraft buttons.
 -- mode: "AUTHOR" (no roster validation on Simulate) or "SESSION" (roster validation on Simulate)
 
-local W  = PugRaidAssignmentsWidgets
-local S  = PugRaidAssignmentsStorage
-local P  = PugRaidAssignmentsParser
-local T  = PugRaidAssignmentsTemplate
-local D  = PugRaidAssignmentsDispatcher
-local R  = PugRaidAssignmentsRoster
+local W             = PugRaidAssignmentsWidgets
+local S             = PugRaidAssignmentsStorage
+local P             = PugRaidAssignmentsParser
+local T             = PugRaidAssignmentsTemplate
+local D             = PugRaidAssignmentsDispatcher
+local R             = PugRaidAssignmentsRoster
 
 local frame
-local varRows       = {}  -- { label, editBox, bgFrame, varName, skipCheck, pickBtn }
-local sectionChecks = {}  -- { kind -> checkbox }
+local varRows       = {} -- { label, editBox, bgFrame, varName, skipCheck, pickBtn }
+local sectionChecks = {} -- { kind -> checkbox }
 local sectionsData  = {}
 local currentRaidId, currentDocId, currentMode
 
-local ROW_H = 26
-local LABEL_W = 180
+local ROW_H         = 26
+local LABEL_W       = 180
 
 local function ClearVarRows()
     for _, row in ipairs(varRows) do
         row.label:Hide()
         row.bgFrame:Hide()
-        if row.pickBtn  then row.pickBtn:Hide()  end
+        if row.pickBtn then row.pickBtn:Hide() end
         if row.skipCheck then row.skipCheck:Hide() end
     end
     varRows = {}
@@ -32,7 +32,9 @@ local function CollectValues()
     local values = {}
     for _, row in ipairs(varRows) do
         values[row.varName] = row.editBox:GetText()
+        print("gather value: " .. row.varName .. " " .. values[row.varName])
     end
+
     return values
 end
 
@@ -81,6 +83,7 @@ end
 
 local function ValidateOrWarn(values, skippedVars)
     local personalVars = GetPersonalVarNames()
+
     local invalid = D.ValidateRoster(values, personalVars, skippedVars)
     if #invalid > 0 then
         print("|cffff0000PugRaid:|r Invalid roster assignments:")
@@ -99,7 +102,7 @@ local function Rebuild(raidId, docId, sections, mode, highlightVars)
     sectionsData  = sections
 
     -- In SESSION mode, retrieve the persisted skip state for this doc.
-    local sess = (currentMode == "SESSION") and S.GetActiveSession() or nil
+    local sess    = (currentMode == "SESSION") and S.GetActiveSession() or nil
 
     -- Section checkboxes
     for _, cb in pairs(sectionChecks) do cb:Hide() end
@@ -185,7 +188,8 @@ local function Rebuild(raidId, docId, sections, mode, highlightVars)
             end)
         end
 
-        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick, skipCheck = skipCb }
+        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick, skipCheck =
+        skipCb }
     end
 
     local totalH = math.max(200, 100 + #allVars * ROW_H + 40)
@@ -201,11 +205,11 @@ local function Build()
     local btnSend = W.MakeButton(frame, "Send", 70, 22)
     btnSend:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 10)
     btnSend:SetScript("OnClick", function()
-        local values     = CollectValues()
-        local skipped    = CollectSkippedVars()
+        local values  = CollectValues()
+        local skipped = CollectSkippedVars()
         if not ValidateOrWarn(values, skipped) then return end
-        local filtered   = BuildFilteredSections()
-        local messages   = T.BuildMessages(filtered, values, skipped)
+        local filtered = BuildFilteredSections()
+        local messages = T.BuildMessages(filtered, values, skipped)
         PersistValues(values)
 
         if P.HasBlocks(filtered) then
@@ -221,11 +225,9 @@ local function Build()
     local btnSim = W.MakeButton(frame, "Simulate", 80, 22)
     btnSim:SetPoint("LEFT", btnSend, "RIGHT", 6, 0)
     btnSim:SetScript("OnClick", function()
-        local values  = CollectValues()
-        local skipped = CollectSkippedVars()
-        if currentMode == "SESSION" then
-            if not ValidateOrWarn(values, skipped) then return end
-        end
+        local values   = CollectValues()
+        local skipped  = CollectSkippedVars()
+        -- ValidateOrWarn(values, skipped)
         local filtered = BuildFilteredSections()
         local messages = T.BuildMessages(filtered, values, skipped)
         D.Simulate(messages)

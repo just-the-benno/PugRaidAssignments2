@@ -347,6 +347,7 @@ local function Build()
         if sess then
             S.EndSession(sess)
             print("|cffffff00PugRaid:|r Session ended.")
+            LoggingCombat(false)
         end
         bar:Hide()
         ShowChecklist(false)

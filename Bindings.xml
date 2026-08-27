@@ -1,3 +1,8 @@
 <Bindings>
-  <Binding name="PUGRAIDTARGET" header="BINDING_HEADER_PUGRAID2" />
+    <Binding name="HEADER_PUGRAIDPLAYERBAR" description="Pug Raid Player Bar" header="PUGRAIDPLAYERBAR"/>
+    
+    <!-- The actual keybinding item -->
+    <Binding name="PUGRAID_TARGET_KEY" category="PUGRAIDPLAYERBAR">
+        PugRaidPlayerBar_OnTargetKey();
+    </Binding>
 </Bindings>
