@@ -23,7 +23,7 @@ local RAID_TYPES = {
 
 local ROW_H = 36
 local ROW_PAD = 4
-local ROW_W = 550
+local ROW_W = 640
 
 local function ClearRows()
     for _, r in ipairs(_raidRows) do
@@ -69,8 +69,15 @@ local function RebuildList()
         end)
         _raidRows[#_raidRows + 1] = btnDocs
 
+        local btnAssignAll = W.MakeButton(row, "Assign All", 80, 22)
+        btnAssignAll:SetPoint("LEFT", btnDocs, "RIGHT", 4, 0)
+        btnAssignAll:SetScript("OnClick", function()
+            PugRaidAssignmentsRaidAssignWindow_Open(capturedRaid.id)
+        end)
+        _raidRows[#_raidRows + 1] = btnAssignAll
+
         local btnSession = W.MakeButton(row, "Last Session", 90, 22)
-        btnSession:SetPoint("LEFT", btnDocs, "RIGHT", 4, 0)
+        btnSession:SetPoint("LEFT", btnAssignAll, "RIGHT", 4, 0)
         btnSession:SetScript("OnClick", function()
             local sess = S.GetLastSession(capturedRaid.id)
             PugRaidAssignmentsSessionViewWindow_Open(capturedRaid, sess)
