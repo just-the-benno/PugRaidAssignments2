@@ -18,6 +18,7 @@ UI\SessionViewWindow.lua
 UI\DocumentsWindow.lua
 UI\RaidAssignWindow.lua
 UI\RaidListWindow.lua
+UI\PlayerBar_Targeting.lua
 UI\PlayerBar.lua
 UI\PresenterBar.lua
 Core.lua

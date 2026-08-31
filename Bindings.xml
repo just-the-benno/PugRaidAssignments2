@@ -8,4 +8,7 @@
         <Binding name="PUGRAID_AUTO_TARGET_KEY" category="PUGRAIDPLAYERBAR">
         PugRaidPlayerBar_KeybindAutoTarget();
     </Binding>
+    <Binding name="PUGRAID_MOUSEOVER_KEY" category="PUGRAIDPLAYERBAR">
+        PugRaidPlayerBar_OnMouseoverKey();
+    </Binding>
 </Bindings>
