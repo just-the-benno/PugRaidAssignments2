@@ -22,3 +22,6 @@ UI\PlayerBar_Targeting.lua
 UI\PlayerBar.lua
 UI\PresenterBar.lua
 Core.lua
+
+-- TEMPORARY: combat log probe for Hyjal wave data gathering (branch: feature/combat-log-probe)
+CombatLogProbe.lua
