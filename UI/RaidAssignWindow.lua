@@ -10,19 +10,28 @@ local D  = PugRaidAssignmentsDispatcher
 local R  = PugRaidAssignmentsRoster
 
 local frame
+local scrollFrame, contentFrame
 local varRows       = {}  -- { label, editBox, bgFrame, varName, skipCheck, pickBtn }
 local sectionChecks = {}  -- { kind -> checkbox }
-local docsData      = {}  -- { { docId = docId, sections = sections }, ... }
+local docsData      = {}  -- { { docId = docId, sections = sections, vars = {varName->true} }, ... }
 local currentRaidId
 
-local ROW_H = 26
+local ROW_H   = 26
 local LABEL_W = 180
+
+-- Height of the fixed window; scroll pane fills the space between the
+-- checkboxes (top area) and the action buttons (bottom strip).
+local WIN_W        = 590
+local WIN_H        = 480
+local CB_AREA_H    = 60   -- reserved at top for section-kind checkboxes
+local BTN_AREA_H   = 40   -- reserved at bottom for action buttons
+local SCROLL_H     = WIN_H - CB_AREA_H - BTN_AREA_H - 30  -- ~370
 
 local function ClearVarRows()
     for _, row in ipairs(varRows) do
         row.label:Hide()
         row.bgFrame:Hide()
-        if row.pickBtn  then row.pickBtn:Hide()  end
+        if row.pickBtn   then row.pickBtn:Hide()   end
         if row.skipCheck then row.skipCheck:Hide() end
     end
     varRows = {}
@@ -58,7 +67,7 @@ end
 
 local function GetPersonalVarNames()
     local names = {}
-    local seen = {}
+    local seen  = {}
     for _, doc in ipairs(docsData) do
         for _, sec in ipairs(doc.sections) do
             if sec.kind == "PERSONAL" then
@@ -107,17 +116,17 @@ local function Rebuild(raidId)
 
     -- Collect all documents, their parsed sections, and unique variables/kinds.
     docsData = {}
-    local allVars = {}
+    local allVars  = {}
     local seenVars = {}
     local kindOrder = {}
-    local kindSeen = {}
+    local kindSeen  = {}
 
     local docs = S.GetDocumentsSorted(raidId)
     for _, doc in ipairs(docs) do
         local ver = S.GetLatestVersion(raidId, doc.id)
         if ver then
             local sections = P.Parse(ver.text)
-            local lines = {}
+            local lines    = {}
             for _, sec in ipairs(sections) do
                 if sec.kind ~= "TARGETS" and not kindSeen[sec.kind] then
                     kindSeen[sec.kind] = true
@@ -127,7 +136,7 @@ local function Rebuild(raidId)
             end
 
             local docVarList = P.GetVariables(table.concat(lines, "\n"))
-            local docVars = {}
+            local docVars    = {}
             for _, var in ipairs(docVarList) do
                 docVars[var] = true
                 if not seenVars[var] then
@@ -140,50 +149,47 @@ local function Rebuild(raidId)
         end
     end
 
-    -- Section checkboxes
+    -- Section checkboxes (anchored to the outer frame, above the scroll pane)
     for _, cb in pairs(sectionChecks) do cb:Hide() end
     sectionChecks = {}
-    local cbX, cbY = 10, -40
+    local cbX = 10
     for _, kind in ipairs(kindOrder) do
         local cb = W.MakeCheckbox(frame, kind)
         cb:SetChecked(kind ~= "LONG") -- default: all except LONG
-        cb:SetPoint("TOPLEFT", frame, "TOPLEFT", cbX, cbY)
+        cb:SetPoint("TOPLEFT", frame, "TOPLEFT", cbX, -40)
         sectionChecks[kind] = cb
         cbX = cbX + 120
     end
 
-    -- Variable rows
+    -- Variable rows (parented to the scroll content frame)
     ClearVarRows()
 
-    local startY = -80
     for i, var in ipairs(allVars) do
-        local y = startY - (i - 1) * ROW_H
-        local lbl = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local y = -(i - 1) * ROW_H
+
+        local lbl = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         lbl:SetText("{{" .. var .. "}}")
         lbl:SetWidth(LABEL_W)
-        lbl:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
+        lbl:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 10, y)
 
-        local eb, bg = W.MakeEditBox(frame, 190, 22, false)
-        bg:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_W + 16, y + 1)
+        local eb, bg = W.MakeEditBox(contentFrame, 190, 22, false)
+        bg:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", LABEL_W + 16, y + 1)
 
-        -- Prefill from lastValues: first non-nil value across all documents.
+        -- Prefill: first non-nil lastValue across all documents.
         local lastVal
         for _, doc in ipairs(docsData) do
             local v = S.GetLastValue(raidId, doc.docId, var)
-            if v then
-                lastVal = v
-                break
-            end
+            if v then lastVal = v; break end
         end
         if lastVal then eb:SetText(lastVal) end
 
-        -- Roster-select dropdown button
-        local btnPick = W.MakeButton(frame, "Select...", 70, 22)
+        -- Roster-select dropdown
+        local btnPick    = W.MakeButton(contentFrame, "Select...", 70, 22)
         btnPick:SetPoint("LEFT", bg, "RIGHT", 6, 0)
         local capturedEb = eb
         btnPick:SetScript("OnClick", function(self)
             local members = R.GetMembers()
-            local items = {}
+            local items   = {}
             for _, name in ipairs(members) do
                 items[#items + 1] = { text = name, value = name }
             end
@@ -192,23 +198,38 @@ local function Rebuild(raidId)
             end)
         end)
 
-        -- Skip checkbox — always visible, unchecked by default.
-        local skipCb = W.MakeCheckbox(frame, "Skip")
+        -- Skip checkbox
+        local skipCb = W.MakeCheckbox(contentFrame, "Skip")
         skipCb:SetPoint("LEFT", btnPick, "RIGHT", 6, 0)
 
-        varRows[#varRows + 1] = { label = lbl, editBox = eb, bgFrame = bg, varName = var, pickBtn = btnPick, skipCheck = skipCb }
+        varRows[#varRows + 1] = {
+            label    = lbl,
+            editBox  = eb,
+            bgFrame  = bg,
+            varName  = var,
+            pickBtn  = btnPick,
+            skipCheck = skipCb,
+        }
     end
 
-    local totalH = math.max(200, 100 + #allVars * ROW_H + 40)
-    frame:SetHeight(totalH)
+    -- Grow the content frame to fit all rows
+    contentFrame:SetHeight(math.max(1, #allVars * ROW_H))
 end
 
 local function Build()
-    frame = W.MakeWindow("PugRaidRaidAssignWindow", "Assign All", 500, 300)
+    frame = W.MakeWindow("PugRaidRaidAssignWindow", "Assign All", WIN_W, WIN_H)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
 
-    -- Bottom buttons
+    -- Scroll pane for variable rows
+    -- Sits below the checkbox area and above the button strip.
+    local sf, cf = W.MakeScrollPane(frame, WIN_W - 30, SCROLL_H)
+    sf:SetPoint("TOPLEFT",  frame, "TOPLEFT",  10, -(CB_AREA_H + 10))
+    sf:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, BTN_AREA_H + 6)
+    scrollFrame  = sf
+    contentFrame = cf
+
+    -- Bottom action buttons
     local btnSend = W.MakeButton(frame, "Send", 70, 22)
     btnSend:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 10)
     btnSend:SetScript("OnClick", function()
@@ -221,9 +242,7 @@ local function Build()
         for _, doc in ipairs(docsData) do
             local filtered = BuildFilteredSections(doc.sections)
             local messages = T.BuildMessages(filtered, values, skipped)
-
             if P.HasBlocks(filtered) then
-                -- Presenter mode: accumulate block queues across documents.
                 local queue = D.BuildPresenterQueue(messages)
                 for _, item in ipairs(queue) do
                     presenterQueue[#presenterQueue + 1] = item
@@ -243,7 +262,6 @@ local function Build()
     btnSim:SetScript("OnClick", function()
         local values  = CollectValues()
         local skipped = CollectSkippedVars()
-
         for _, doc in ipairs(docsData) do
             local filtered = BuildFilteredSections(doc.sections)
             local messages = T.BuildMessages(filtered, values, skipped)

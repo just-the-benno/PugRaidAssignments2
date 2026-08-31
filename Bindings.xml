@@ -3,6 +3,12 @@
     
     <!-- The actual keybinding item -->
     <Binding name="PUGRAID_TARGET_KEY" category="PUGRAIDPLAYERBAR">
-        PugRaidPlayerBar_OnTargetKey();
+        PugRaidPlayerBar_KeybindTarget();
+    </Binding>
+        <Binding name="PUGRAID_AUTO_TARGET_KEY" category="PUGRAIDPLAYERBAR">
+        PugRaidPlayerBar_KeybindAutoTarget();
+    </Binding>
+    <Binding name="PUGRAID_MOUSEOVER_KEY" category="PUGRAIDPLAYERBAR">
+        PugRaidPlayerBar_OnMouseoverKey();
     </Binding>
 </Bindings>

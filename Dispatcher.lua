@@ -137,10 +137,10 @@ end
 -- iconIndex: 1-8 per SetRaidTarget API (1=Star ... 8=Skull)
 -- Returns true on success, false if not leader/assist.
 function D.MarkTarget(iconIndex)
-    if not (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) then
-        print("|cffff8800PugRaid:|r You need to be leader or assist to mark targets.")
-        return false
-    end
+    -- if not (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) then
+    --     print("|cffff8800PugRaid:|r You need to be leader or assist to mark targets.")
+    --     return false
+    -- end
     SetRaidTarget("target", iconIndex)
     return true
 end

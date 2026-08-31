@@ -30,7 +30,7 @@ local function GetCurrentDoc(sess, raid)
     return docs[idx], idx, #docs
 end
 
--- ── Checklist ─────────────────────────────────────────────────────────────────
+-- ── Checklist ──────────────────────────────────────────────────────────────────
 
 local function RebuildChecklist(sess, doc)
     -- Clear old rows
@@ -50,7 +50,6 @@ local function RebuildChecklist(sess, doc)
     local rowH = 20
     local y = -4
     for i, entry in ipairs(targets) do
-        
 
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
@@ -85,7 +84,17 @@ local function ShowChecklist(show)
     end
 end
 
--- ── Bar text update ───────────────────────────────────────────────────────────
+-- ── Targeting callbacks ────────────────────────────────────────────────────────
+
+-- Passed to the targeting module so it can drive checklist state
+-- without needing direct access to this file's locals.
+local TargetingCallbacks = {
+    IsExpanded      = function() return _isExpanded end,
+    ShowChecklist   = function(show) ShowChecklist(show) end,
+    RebuildChecklist = function(sess, doc) RebuildChecklist(sess, doc) end,
+}
+
+-- ── Bar text update ────────────────────────────────────────────────────────────
 
 local function RefreshBar()
     local sess, raid = GetActiveSessionAndRaid()
@@ -104,59 +113,7 @@ local function RefreshBar()
     end
 end
 
--- ── Build ─────────────────────────────────────────────────────────────────────
-
--- Shared target-action logic used by both btnTarget's OnClick and the keybinding.
-local function DoTargetAction()
-    local sess, raid = GetActiveSessionAndRaid()
-    local doc = GetCurrentDoc(sess, raid)
-    if not doc then
-        -- No doc: just open the panel if not already shown.
-        if not _isExpanded then ShowChecklist(true) end
-        return
-    end
-
-    if not _isExpanded then
-        -- First click: open the checklist panel.
-        ShowChecklist(true)
-        return
-    end
-
-    -- Panel already open: attempt to mark current target.
-    local targetName = UnitName("target")
-    if targetName then
-        local ver      = S.GetLatestVersion(sess.raidId, doc.id)
-        local sections = ver and P.Parse(ver.text) or {}
-        local targets  = P.GetTargets(sections)
-        local tp       = S.GetTargetProgress(sess, doc.id)
-
-        for _, entry in ipairs(targets) do
-            if entry.mobName:lower() == targetName:lower() and not tp.assignedIcons[entry.iconIndex] then
-                if D.MarkTarget(entry.iconIndex) then
-                    S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
-                end
-                break
-            end
-        end
-
-        -- Re-fetch only the progress table (version text / targets list unchanged).
-        -- Auto-close if all targets are now marked; otherwise refresh the display.
-        local tp2 = S.GetTargetProgress(sess, doc.id)
-        local allDone = #targets > 0
-        for _, entry in ipairs(targets) do
-            if not tp2.assignedIcons[entry.iconIndex] then
-                allDone = false
-                break
-            end
-        end
-        if allDone then
-            ShowChecklist(false)
-        else
-            RebuildChecklist(sess, doc)
-        end
-    end
-    -- Do NOT close the panel on subsequent clicks.
-end
+-- ── Build ──────────────────────────────────────────────────────────────────────
 
 local function Build()
     bar = CreateFrame("Frame", "PugRaidPlayerBar", UIParent, "BackdropTemplate")
@@ -338,7 +295,9 @@ local function Build()
 
     local btnTarget = W.MakeButton(bar, "Target", 56, 24)
     btnTarget:SetPoint("LEFT", btnSend, "RIGHT", 4, 0)
-    btnTarget:SetScript("OnClick", DoTargetAction)
+    btnTarget:SetScript("OnClick", function()
+        PugRaidTargeting_ExecuteManualTarget(TargetingCallbacks)
+    end)
 
     local btnEnd = W.MakeButton(bar, "End", 44, 24)
     btnEnd:SetPoint("LEFT", btnTarget, "RIGHT", 4, 0)
@@ -385,7 +344,7 @@ local function Build()
     end)
 end
 
--- ── Public API ────────────────────────────────────────────────────────────────
+-- ── Public API ─────────────────────────────────────────────────────────────────
 
 function PugRaidPlayerBar_Open()
     if not bar then Build() end
@@ -405,8 +364,14 @@ function PugRaidPlayerBar_IsShown()
     return bar and bar:IsShown()
 end
 
--- Called by the PUGRAIDTARGET keybinding — same logic as clicking the Target button.
+-- Called by the PUGRAID_TARGET_KEY keybinding.
 function PugRaidPlayerBar_OnTargetKey()
     if not (bar and bar:IsShown()) then return end
-    DoTargetAction()
+    PugRaidTargeting_ExecuteManualTarget(TargetingCallbacks)
+end
+
+-- Called by the PUGRAID_MOUSEOVER_KEY keybinding.
+function PugRaidPlayerBar_OnMouseoverKey()
+    if not (bar and bar:IsShown()) then return end
+    PugRaidTargeting_ExecuteMouseoverTarget(TargetingCallbacks)
 end
