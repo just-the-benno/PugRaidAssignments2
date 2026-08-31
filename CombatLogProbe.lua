@@ -4,20 +4,20 @@
 -- Panel A  (left)  — COMBAT_LOG_EVENT_UNFILTERED
 --   Records every event where a hostile NPC is the destination.
 --   Throttled: one line per unique (subevent + destGUID) pair.
+--   Timestamp: GetTime() (float, millisecond precision).
 --
 -- Panel B  (right) — BigWigs public callback API
---   Uses BigWigsLoader.RegisterMessage to hook:
---     BigWigs_StartBar  — fires when BigWigs creates a countdown bar
---     BigWigs_Message   — fires when BigWigs shows an alert to the raid
---   This is BigWigs' documented public API, so the data is structured and
---   reliable — no raw message sniffing needed.
---   We want to see the bar label / message text for each Hyjal wave so we
---   can map it to the wave documents later.
+--   BigWigs_StartBar  — fires when BigWigs creates a countdown bar
+--   BigWigs_Message   — fires when BigWigs shows an alert
+--   Timestamp: GetTime() (float, millisecond precision).
+--
+-- Comparing the two timestamps tells us whether BigWigs fires before,
+-- after, or simultaneously with the first mob in the combat log.
 --
 -- HOW TO USE:
 --   1. /reload — both panels open automatically.
 --   2. Run BigWigs. Trigger a Hyjal wave.
---   3. Click inside Panel B, Ctrl-A, Ctrl-C, paste back here.
+--   3. Click inside either box, Ctrl-A, Ctrl-C, paste back here.
 --
 -- DISABLING: comment out CombatLogProbe.lua in the .toc.
 
@@ -157,28 +157,24 @@ clFrame:SetScript("OnEvent", function(self, event)
     if seenCL[key] then return end
     seenCL[key] = true
 
-    AppendA(string.format("sub=%-26s  dName=%-22s  dGUID=%s",
-        subevent, tostring(destName), tostring(destGUID)))
+    local t = string.format("%.3f", GetTime())
+    AppendA(string.format("[%s]  sub=%-26s  dName=%-22s  dGUID=%s",
+        t, subevent, tostring(destName), tostring(destGUID)))
 
     if UnitGUID("target") == destGUID then
-        AppendA(string.format("  >> target match: %s", tostring(UnitName("target"))))
+        AppendA(string.format("           >> target match: %s", tostring(UnitName("target"))))
     end
     for i = 1, 40 do
         local unit = "nameplate" .. i
         if UnitExists(unit) and UnitGUID(unit) == destGUID then
-            AppendA(string.format("  >> nameplate%d match: %s", i, tostring(UnitName(unit))))
+            AppendA(string.format("           >> nameplate%d match: %s", i, tostring(UnitName(unit))))
         end
     end
 end)
 
 -- ── Panel B — BigWigs public callback API ─────────────────────────────────────
--- BigWigsLoader.RegisterMessage is BigWigs' documented way for other addons
--- to listen to BigWigs events without coupling to internal implementation.
---
 -- BigWigs_StartBar args:  event, module, key, text, duration, icon
 -- BigWigs_Message  args:  event, module, key, text, type, icon
---
--- We log all args so we can see exactly what BigWigs sends for each Hyjal wave.
 
 local probeHandle = CreateFrame("Frame", "PugRaidBigWigsProbeHandle")
 
@@ -189,8 +185,8 @@ local function hookBigWigs()
     end
 
     BigWigsLoader.RegisterMessage(probeHandle, "BigWigs_StartBar", function(event, module, key, text, duration, icon)
-        local t = date("%H:%M:%S")
-        AppendB(string.format("[%s] StartBar  mod=%-20s  key=%-20s  dur=%-6s  text=\"%s\"",
+        local t = string.format("%.3f", GetTime())
+        AppendB(string.format("[%s]  StartBar  mod=%-20s  key=%-20s  dur=%-8s  text=\"%s\"",
             t,
             tostring(module and module.moduleName or module),
             tostring(key),
@@ -199,8 +195,8 @@ local function hookBigWigs()
     end)
 
     BigWigsLoader.RegisterMessage(probeHandle, "BigWigs_Message", function(event, module, key, text, msgtype, icon)
-        local t = date("%H:%M:%S")
-        AppendB(string.format("[%s] Message   mod=%-20s  key=%-20s  type=%-10s  text=\"%s\"",
+        local t = string.format("%.3f", GetTime())
+        AppendB(string.format("[%s]  Message   mod=%-20s  key=%-20s  type=%-10s  text=\"%s\"",
             t,
             tostring(module and module.moduleName or module),
             tostring(key),
@@ -209,11 +205,10 @@ local function hookBigWigs()
     end)
 
     AppendB("|cff00ff00BigWigs callbacks registered: BigWigs_StartBar + BigWigs_Message|r")
-    AppendB("Trigger a Hyjal wave and watch what appears here.")
+    AppendB("Timestamps are GetTime() floats — compare with Panel A to measure offset.")
     AppendB("----------------------------------------------------------------------")
 end
 
--- Hook immediately if BigWigs is already loaded, otherwise wait for ADDON_LOADED
 if BigWigsLoader then
     hookBigWigs()
 else
