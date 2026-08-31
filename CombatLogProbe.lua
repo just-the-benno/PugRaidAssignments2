@@ -5,18 +5,19 @@
 --   Records every event where a hostile NPC is the destination.
 --   Throttled: one line per unique (subevent + destGUID) pair.
 --
--- Panel B  (right) — CHAT_MSG_ADDON (ALL channels, ALL prefixes)
---   No channel filter this run — we want to see everything BigWigs sends
---   at the moment a wave actually starts, including WHISPER-to-self and
---   any other channel we may have been filtering out.
---   Guild/officer noise is still a lot, but we need the full picture once
---   to identify the exact message and channel, then we can filter again.
+-- Panel B  (right) — BigWigs public callback API
+--   Uses BigWigsLoader.RegisterMessage to hook:
+--     BigWigs_StartBar  — fires when BigWigs creates a countdown bar
+--     BigWigs_Message   — fires when BigWigs shows an alert to the raid
+--   This is BigWigs' documented public API, so the data is structured and
+--   reliable — no raw message sniffing needed.
+--   We want to see the bar label / message text for each Hyjal wave so we
+--   can map it to the wave documents later.
 --
 -- HOW TO USE:
 --   1. /reload — both panels open automatically.
---   2. Run BigWigs. Trigger a Hyjal wave (talk to NPC AND confirm).
+--   2. Run BigWigs. Trigger a Hyjal wave.
 --   3. Click inside Panel B, Ctrl-A, Ctrl-C, paste back here.
---   4. Use the individual Clear buttons or "Clear All" to reset between waves.
 --
 -- DISABLING: comment out CombatLogProbe.lua in the .toc.
 
@@ -42,7 +43,7 @@ win:SetScript("OnDragStop",  win.StopMovingOrSizing)
 win:SetFrameStrata("HIGH")
 win:SetToplevel(true)
 if win.TitleText then
-    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] ALL addon messages (no filter)|r")
+    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] BigWigs Callbacks|r")
 end
 
 local btnClearAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
@@ -131,7 +132,7 @@ anchorBR:SetPoint("TOPLEFT",     anchorBL, "TOPLEFT",     0, 0)
 anchorBR:SetPoint("BOTTOMRIGHT", anchorBL, "BOTTOMRIGHT", 0, 0)
 
 local AppendA, ClearA = MakePanel("|cffffff00[A] COMBAT_LOG_EVENT_UNFILTERED  (hostile NPC dest, throttled)|r", anchorAL, anchorAR)
-local AppendB, ClearB = MakePanel("|cff00ccff[B] ALL CHAT_MSG_ADDON traffic  (no channel filter)|r",            anchorBL, anchorBR)
+local AppendB, ClearB = MakePanel("|cff00ccff[B] BigWigs callbacks  (StartBar + Message)|r",                    anchorBL, anchorBR)
 
 btnClearAll:SetScript("OnClick", function() ClearA() ClearB() end)
 
@@ -170,43 +171,64 @@ clFrame:SetScript("OnEvent", function(self, event)
     end
 end)
 
--- ── Panel B — ALL addon messages, no channel filter ──────────────────────────
--- We saw "B^SummitNext^Azgalor" on RAID when talking to the NPC, but nothing
--- when the wave actually started. Removing the channel filter to catch anything
--- BigWigs may send on WHISPER, SAY, or other channels at wave-start time.
+-- ── Panel B — BigWigs public callback API ─────────────────────────────────────
+-- BigWigsLoader.RegisterMessage is BigWigs' documented way for other addons
+-- to listen to BigWigs events without coupling to internal implementation.
+--
+-- BigWigs_StartBar args:  event, module, key, text, duration, icon
+-- BigWigs_Message  args:  event, module, key, text, type, icon
+--
+-- We log all args so we can see exactly what BigWigs sends for each Hyjal wave.
 
-local addonFrame = CreateFrame("Frame", "PugRaidAddonMsgProbeFrame")
-addonFrame:RegisterEvent("CHAT_MSG_ADDON")
+local probeHandle = CreateFrame("Frame", "PugRaidBigWigsProbeHandle")
 
-local registerFn = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix
-                or RegisterAddonMessagePrefix
+local function hookBigWigs()
+    if not BigWigsLoader then
+        AppendB("|cffff4444BigWigsLoader not found — is BigWigs loaded?|r")
+        return
+    end
 
-local prefixesToRegister = {
-    "BigWigs", "BigWigs3", "BigWigs4", "BigWigsRez",
-    "DBM", "DBM-Core", "DBMv4",
-    "BWPVE", "BWPVP",
-}
-
-local registered = {}
-for _, prefix in ipairs(prefixesToRegister) do
-    local ok = pcall(function()
-        if registerFn then registerFn(prefix) end
+    BigWigsLoader.RegisterMessage(probeHandle, "BigWigs_StartBar", function(event, module, key, text, duration, icon)
+        local t = date("%H:%M:%S")
+        AppendB(string.format("[%s] StartBar  mod=%-20s  key=%-20s  dur=%-6s  text=\"%s\"",
+            t,
+            tostring(module and module.moduleName or module),
+            tostring(key),
+            tostring(duration),
+            tostring(text)))
     end)
-    if ok then registered[#registered + 1] = prefix end
+
+    BigWigsLoader.RegisterMessage(probeHandle, "BigWigs_Message", function(event, module, key, text, msgtype, icon)
+        local t = date("%H:%M:%S")
+        AppendB(string.format("[%s] Message   mod=%-20s  key=%-20s  type=%-10s  text=\"%s\"",
+            t,
+            tostring(module and module.moduleName or module),
+            tostring(key),
+            tostring(msgtype),
+            tostring(text)))
+    end)
+
+    AppendB("|cff00ff00BigWigs callbacks registered: BigWigs_StartBar + BigWigs_Message|r")
+    AppendB("Trigger a Hyjal wave and watch what appears here.")
+    AppendB("----------------------------------------------------------------------")
 end
 
-AppendB("Registered: " .. table.concat(registered, ", "))
-AppendB("No channel filter — showing everything. Clear before confirming the wave dialog.")
-AppendB("----------------------------------------------------------------------")
-
-addonFrame:SetScript("OnEvent", function(self, event, prefix, payload, channel, sender)
-    local t = date("%H:%M:%S")
-    AppendB(string.format("[%s]  pfx=%-14s  ch=%-14s  from=%-20s  msg=\"%s\"",
-        t, tostring(prefix), tostring(channel), tostring(sender), tostring(payload)))
-end)
+-- Hook immediately if BigWigs is already loaded, otherwise wait for ADDON_LOADED
+if BigWigsLoader then
+    hookBigWigs()
+else
+    local loaderFrame = CreateFrame("Frame", "PugRaidBigWigsLoaderWatcher")
+    loaderFrame:RegisterEvent("ADDON_LOADED")
+    loaderFrame:SetScript("OnEvent", function(self, event, addonName)
+        if BigWigsLoader then
+            hookBigWigs()
+            self:UnregisterEvent("ADDON_LOADED")
+        end
+    end)
+    AppendB("Waiting for BigWigsLoader to become available...")
+end
 
 -- ── Show ──────────────────────────────────────────────────────────────────────
 
 AppendA("=== Panel A ready — trigger a Hyjal wave ===")
-AppendB("=== Panel B ready — ALL addon messages, no filter ===")
 win:Show()
