@@ -1,29 +1,41 @@
 -- CombatLogProbe.lua
--- TEMPORARY: Data-gathering probe for evaluating the combat log / auto-mark
--- approach for gauntlet waves (e.g. Mount Hyjal).
+-- TEMPORARY: Two-panel probe window for evaluating auto-mark approaches.
 --
--- Opens a window on load with a scrollable, selectable text area.
--- All combat log output is appended there so you can select-all and copy it.
+-- Panel A  (left)  — COMBAT_LOG_EVENT_UNFILTERED
+--   Records every event where a hostile NPC is the destination.
+--   Throttled: one line per unique (subevent + destGUID) pair.
+--   Also notes whether the mob's GUID already matches the current target
+--   or any visible nameplate at the moment the event fires.
+--
+-- Panel B  (right) — NAME_PLATE_UNIT_ADDED / NAME_PLATE_UNIT_REMOVED
+--   Records every nameplate appearance / disappearance.
+--   Shows unit name, GUID, and whether it is a hostile NPC.
+--   This lets us see whether nameplates appear *before* the combat log
+--   picks up the mob (important for mobs like Shadowy Necromancers that
+--   don't self-buff on spawn).
 --
 -- HOW TO USE:
---   1. Load the addon. The probe window opens automatically.
+--   1. /reload — both panels open automatically.
 --   2. Trigger a Hyjal wave.
---   3. Click inside the output box, Ctrl-A to select all, Ctrl-C to copy.
---   4. Paste the result back into the chat with the developer.
+--   3. Click inside either box, Ctrl-A, Ctrl-C, paste back here.
+--   4. Use the individual Clear buttons or "Clear All" to reset.
 --
--- DISABLING: remove CombatLogProbe.lua from the .toc (or comment it out).
---
--- This file is intentionally NOT wired into any permanent addon state.
--- Delete / abandon this branch once data is gathered.
+-- DISABLING: comment out CombatLogProbe.lua in the .toc.
 
--- ── Window ────────────────────────────────────────────────────────────────────
+-- ── Layout constants ──────────────────────────────────────────────────────────
 
-local WIN_W, WIN_H = 720, 400
-local PAD = 8
+local WIN_W  = 1100
+local WIN_H  = 440
+local PAD    = 8
+local BTN_H  = 22
+local HDR_H  = 54   -- space at top for title bar + buttons
+local PANEL_GAP = 6
+
+-- ── Main window ───────────────────────────────────────────────────────────────
 
 local win = CreateFrame("Frame", "PugRaidProbeWindow", UIParent, "BasicFrameTemplateWithInset")
 win:SetSize(WIN_W, WIN_H)
-win:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
+win:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
 win:SetMovable(true)
 win:EnableMouse(true)
 win:RegisterForDrag("LeftButton")
@@ -31,117 +43,193 @@ win:SetScript("OnDragStart", win.StartMoving)
 win:SetScript("OnDragStop",  win.StopMovingOrSizing)
 win:SetFrameStrata("HIGH")
 win:SetToplevel(true)
-if win.TitleText then win.TitleText:SetText("PugRaid Combat Log Probe") end
+if win.TitleText then win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] Nameplate Events|r") end
 
--- Clear button
-local btnClear = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
-btnClear:SetSize(70, 22)
-btnClear:SetText("Clear")
-btnClear:SetPoint("TOPRIGHT", win, "TOPRIGHT", -28, -28)
+-- "Clear All" button (top-right)
+local btnClearAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+btnClearAll:SetSize(80, BTN_H)
+btnClearAll:SetText("Clear All")
+btnClearAll:SetPoint("TOPRIGHT", win, "TOPRIGHT", -28, -28)
 
--- Scrollable output area — built manually so the EditBox is fully selectable
-local scrollBg = CreateFrame("Frame", nil, win, "BackdropTemplate")
-scrollBg:SetPoint("TOPLEFT",     win, "TOPLEFT",     PAD, -50)
-scrollBg:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD, PAD + 4)
-scrollBg:SetBackdrop({
-    bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
-    edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-    tile = true, tileSize = 8, edgeSize = 8,
-    insets = { left=2, right=2, top=2, bottom=2 },
-})
-scrollBg:SetBackdropColor(0, 0, 0, 0.85)
-scrollBg:SetBackdropBorderColor(0.4, 0.6, 1.0, 1)
+-- ── Panel factory ─────────────────────────────────────────────────────────────
+-- Returns: AppendLine(text), ClearPanel()
 
-local sf = CreateFrame("ScrollFrame", nil, scrollBg, "UIPanelScrollFrameTemplate")
-sf:SetPoint("TOPLEFT",     scrollBg, "TOPLEFT",     4, -4)
-sf:SetPoint("BOTTOMRIGHT", scrollBg, "BOTTOMRIGHT", -22, 4)
+local function MakePanel(label, anchorLeft, anchorRight, clearBtn)
+    -- Header label
+    local hdr = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hdr:SetPoint("TOPLEFT",  anchorLeft,  "TOPLEFT",  0,  0)
+    hdr:SetPoint("TOPRIGHT", anchorRight, "TOPRIGHT", 0,  0)
+    hdr:SetJustifyH("LEFT")
+    hdr:SetText(label)
 
-local eb = CreateFrame("EditBox", "PugRaidProbeEditBox", sf)
-eb:SetMultiLine(true)
-eb:SetAutoFocus(false)
-eb:EnableMouse(true)
-eb:SetFontObject(ChatFontNormal)
-eb:SetWidth(sf:GetWidth() or (WIN_W - PAD * 2 - 26))
-eb:SetHeight(1)   -- grows with content
-eb:SetScript("OnEscapePressed", eb.ClearFocus)
-sf:SetScrollChild(eb)
+    -- Clear button for this panel
+    local btnClear = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+    btnClear:SetSize(60, BTN_H)
+    btnClear:SetText("Clear")
+    btnClear:SetPoint("TOPRIGHT", anchorRight, "TOPRIGHT", 0, 0)
 
-btnClear:SetScript("OnClick", function()
-    eb:SetText("")
-end)
+    -- Backdrop
+    local bg = CreateFrame("Frame", nil, win, "BackdropTemplate")
+    bg:SetPoint("TOPLEFT",     anchorLeft,  "TOPLEFT",  0, -(BTN_H + 2))
+    bg:SetPoint("BOTTOMRIGHT", anchorRight, "BOTTOMRIGHT", 0, 0)
+    bg:SetBackdrop({
+        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile = true, tileSize = 8, edgeSize = 8,
+        insets = { left=2, right=2, top=2, bottom=2 },
+    })
+    bg:SetBackdropColor(0, 0, 0, 0.85)
+    bg:SetBackdropBorderColor(0.4, 0.6, 1.0, 1)
 
--- ── Append helper ─────────────────────────────────────────────────────────────
+    local sf = CreateFrame("ScrollFrame", nil, bg, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT",     bg, "TOPLEFT",     4,   -4)
+    sf:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -22,  4)
 
-local lineCount = 0
-local MAX_LINES = 500   -- safety cap so the box doesn't grow forever
+    local eb = CreateFrame("EditBox", nil, sf)
+    eb:SetMultiLine(true)
+    eb:SetAutoFocus(false)
+    eb:EnableMouse(true)
+    eb:SetFontObject(ChatFontNormal)
+    eb:SetWidth(1)   -- will be set after layout via OnSizeChanged
+    eb:SetHeight(1)
+    eb:SetScript("OnEscapePressed", eb.ClearFocus)
+    sf:SetScrollChild(eb)
 
-local function AppendLine(line)
-    if lineCount >= MAX_LINES then return end
-    lineCount = lineCount + 1
-    local current = eb:GetText()
-    if current == "" then
-        eb:SetText(line)
-    else
-        eb:SetText(current .. "\n" .. line)
+    -- Keep EditBox width in sync with scroll frame
+    sf:SetScript("OnSizeChanged", function(self, w, h)
+        eb:SetWidth(math.max(1, w))
+    end)
+
+    local lineCount = 0
+    local MAX_LINES = 600
+
+    local function AppendLine(text)
+        if lineCount >= MAX_LINES then return end
+        lineCount = lineCount + 1
+        local cur = eb:GetText()
+        eb:SetText(cur == "" and text or (cur .. "\n" .. text))
+        sf:SetVerticalScroll(sf:GetVerticalScrollRange())
     end
-    -- Scroll to bottom
-    sf:SetVerticalScroll(sf:GetVerticalScrollRange())
+
+    local function ClearPanel()
+        eb:SetText("")
+        lineCount = 0
+    end
+
+    btnClear:SetScript("OnClick", ClearPanel)
+
+    return AppendLine, ClearPanel
 end
 
--- ── Combat log listener ───────────────────────────────────────────────────────
+-- ── Anchor frames for the two panels ─────────────────────────────────────────
+-- We use invisible anchor frames to define the left/right columns.
 
--- Throttle: only record a given destGUID once per event subtype to avoid
--- flooding the box when the same mob generates dozens of SWING_DAMAGE lines.
-local seen = {}  -- [subevent.."::"..destGUID] = true
+local panelH = WIN_H - HDR_H - PAD
+local halfW  = math.floor((WIN_W - PAD * 2 - PANEL_GAP) / 2)
 
-local probeFrame = CreateFrame("Frame", "PugRaidCombatLogProbeFrame")
-probeFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+local anchorAL = CreateFrame("Frame", nil, win)
+anchorAL:SetSize(halfW, panelH)
+anchorAL:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -HDR_H)
 
-probeFrame:SetScript("OnEvent", function(self, event)
+local anchorAR = CreateFrame("Frame", nil, win)
+anchorAR:SetSize(halfW, panelH)
+anchorAR:SetPoint("TOPLEFT", anchorAL, "TOPLEFT", 0, 0)
+anchorAR:SetPoint("BOTTOMRIGHT", anchorAL, "BOTTOMRIGHT", 0, 0)
+
+local anchorBL = CreateFrame("Frame", nil, win)
+anchorBL:SetSize(halfW, panelH)
+anchorBL:SetPoint("TOPLEFT", anchorAL, "TOPRIGHT", PANEL_GAP, 0)
+
+local anchorBR = CreateFrame("Frame", nil, win)
+anchorBR:SetSize(halfW, panelH)
+anchorBR:SetPoint("TOPLEFT", anchorBL, "TOPLEFT", 0, 0)
+anchorBR:SetPoint("BOTTOMRIGHT", anchorBL, "BOTTOMRIGHT", 0, 0)
+
+local AppendA, ClearA = MakePanel("|cffffff00[A] COMBAT_LOG_EVENT_UNFILTERED  (hostile NPC dest, throttled)|r", anchorAL, anchorAR)
+local AppendB, ClearB = MakePanel("|cff00ccff[B] NAME_PLATE_UNIT_ADDED / REMOVED|r",                           anchorBL, anchorBR)
+
+btnClearAll:SetScript("OnClick", function() ClearA() ClearB() end)
+
+-- ── Panel A — Combat log listener ────────────────────────────────────────────
+
+local seenCL = {}  -- [subevent.."::"..destGUID] = true
+
+local clFrame = CreateFrame("Frame", "PugRaidCombatLogProbeFrame")
+clFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+clFrame:SetScript("OnEvent", function(self, event)
     local timestamp, subevent, hideCaster,
           sourceGUID, sourceName, sourceFlags, sourceRaidFlags,
           destGUID,   destName,   destFlags,   destRaidFlags
         = CombatLogGetCurrentEventInfo()
 
-    -- Only care about hostile NPCs as destination
     if not destFlags then return end
     local isHostileNPC = bit.band(destFlags, COMBATLOG_OBJECT_TYPE_NPC) ~= 0
                       and bit.band(destFlags, COMBATLOG_OBJECT_REACTION_HOSTILE) ~= 0
     if not isHostileNPC then return end
 
-    -- Throttle duplicate (subevent, GUID) pairs
     local key = subevent .. "::" .. (destGUID or "nil")
-    if seen[key] then return end
-    seen[key] = true
+    if seenCL[key] then return end
+    seenCL[key] = true
 
-    -- ── 1. Raw combat log fields ─────────────────────────────────────────────
-    AppendLine(string.format("sub=%-28s  dName=%-24s  dGUID=%s",
+    AppendA(string.format("sub=%-26s  dName=%-22s  dGUID=%s",
         subevent, tostring(destName), tostring(destGUID)))
 
-    -- ── 2. Current target match ──────────────────────────────────────────────
-    local targetGUID = UnitGUID("target")
-    local targetName = UnitName("target")
-    if targetGUID == destGUID then
-        AppendLine(string.format("  >> MATCH target: name=%s  guid=%s",
-            tostring(targetName), tostring(targetGUID)))
+    -- target match
+    if UnitGUID("target") == destGUID then
+        AppendA(string.format("  >> target match: %s", tostring(UnitName("target"))))
     end
 
-    -- ── 3. Nameplate scan ────────────────────────────────────────────────────
+    -- nameplate match
     for i = 1, 40 do
         local unit = "nameplate" .. i
-        if UnitExists(unit) then
-            local npGUID = UnitGUID(unit)
-            if npGUID == destGUID then
-                AppendLine(string.format("  >> MATCH nameplate%d: name=%s  guid=%s",
-                    i, tostring(UnitName(unit)), tostring(npGUID)))
-            end
+        if UnitExists(unit) and UnitGUID(unit) == destGUID then
+            AppendA(string.format("  >> nameplate%d match: %s", i, tostring(UnitName(unit))))
         end
     end
 end)
 
--- ── Show window on load ───────────────────────────────────────────────────────
+-- ── Panel B — Nameplate event listener ───────────────────────────────────────
 
-AppendLine("=== PugRaid Combat Log Probe ready ===")
-AppendLine("Trigger a Hyjal wave, then Ctrl-A / Ctrl-C this box to copy output.")
-AppendLine("----------------------------------------------------------------------")
+local npFrame = CreateFrame("Frame", "PugRaidNameplateProbeFrame")
+
+-- Register events — NAME_PLATE_UNIT_ADDED fires when a nameplate appears in range.
+-- If it doesn't exist in this client, we catch the error and note it.
+local npEventsOK = pcall(function()
+    npFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+    npFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+end)
+
+if not npEventsOK then
+    AppendB("|cffff4444NAME_PLATE_UNIT_ADDED is NOT supported by this client.|r")
+    AppendB("TBC Classic may not expose nameplate unit events.")
+else
+    AppendB("NAME_PLATE_UNIT_ADDED registered OK — waiting for nameplates...")
+end
+
+npFrame:SetScript("OnEvent", function(self, event, unitToken)
+    -- unitToken is e.g. "nameplate1"
+    local name  = UnitName(unitToken)
+    local guid  = UnitGUID(unitToken)
+    local flags = UnitFlags and UnitFlags(unitToken)   -- may be nil in TBC
+
+    local hostile = ""
+    if guid then
+        -- Check reaction via UnitReaction (player vs unit): 1-2 = hostile, 3 = neutral, 4+ = friendly
+        local reaction = UnitReaction and UnitReaction("player", unitToken)
+        if reaction and reaction <= 2 then
+            hostile = "  [HOSTILE]"
+        elseif reaction then
+            hostile = "  [reaction=" .. reaction .. "]"
+        end
+    end
+
+    local tag = (event == "NAME_PLATE_UNIT_ADDED") and "|cff00ff00+ADD |r" or "|cffff6666-REM |r"
+    AppendB(string.format("%s unit=%-12s  name=%-22s  guid=%s%s",
+        tag, tostring(unitToken), tostring(name), tostring(guid), hostile))
+end)
+
+-- ── Show ──────────────────────────────────────────────────────────────────────
+
+AppendA("=== Panel A ready — trigger a Hyjal wave ===")
+AppendB("=== Panel B ready — nameplate events will appear here ===")
 win:Show()
