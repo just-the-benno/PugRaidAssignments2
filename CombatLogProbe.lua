@@ -5,17 +5,18 @@
 --   Records every event where a hostile NPC is the destination.
 --   Throttled: one line per unique (subevent + destGUID) pair.
 --
--- Panel B  (right) — CHAT_MSG_ADDON (BigWigs / DBM addon messages)
---   Registers several known BigWigs/DBM prefixes.
---   Only shows messages from RAID or PARTY channels — guild/whisper noise
---   from other addons is filtered out.
---   Scroll is manual — no auto-scroll to avoid the "random reset" visual glitch.
+-- Panel B  (right) — CHAT_MSG_ADDON (ALL channels, ALL prefixes)
+--   No channel filter this run — we want to see everything BigWigs sends
+--   at the moment a wave actually starts, including WHISPER-to-self and
+--   any other channel we may have been filtering out.
+--   Guild/officer noise is still a lot, but we need the full picture once
+--   to identify the exact message and channel, then we can filter again.
 --
 -- HOW TO USE:
 --   1. /reload — both panels open automatically.
---   2. Run BigWigs. Trigger a Hyjal wave.
---   3. Click inside either box, Ctrl-A, Ctrl-C, paste back here.
---   4. Use the individual Clear buttons or "Clear All" to reset.
+--   2. Run BigWigs. Trigger a Hyjal wave (talk to NPC AND confirm).
+--   3. Click inside Panel B, Ctrl-A, Ctrl-C, paste back here.
+--   4. Use the individual Clear buttons or "Clear All" to reset between waves.
 --
 -- DISABLING: comment out CombatLogProbe.lua in the .toc.
 
@@ -41,7 +42,7 @@ win:SetScript("OnDragStop",  win.StopMovingOrSizing)
 win:SetFrameStrata("HIGH")
 win:SetToplevel(true)
 if win.TitleText then
-    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] BigWigs/DBM  (RAID/PARTY only)|r")
+    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] ALL addon messages (no filter)|r")
 end
 
 local btnClearAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
@@ -50,13 +51,10 @@ btnClearAll:SetText("Clear All")
 btnClearAll:SetPoint("TOPRIGHT", win, "TOPRIGHT", -28, -28)
 
 -- ── Panel factory ─────────────────────────────────────────────────────────────
--- No OnSizeChanged handler and no auto-scroll — both were causing the visible
--- "reset" glitch. Content is stable; user scrolls manually and Ctrl-A/Ctrl-C
--- to copy when ready.
 
 local function MakePanel(label, anchorLeft, anchorRight)
     local hdr = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hdr:SetPoint("TOPLEFT",  anchorLeft,  "TOPLEFT",  0, 0)
+    hdr:SetPoint("TOPLEFT", anchorLeft, "TOPLEFT", 0, 0)
     hdr:SetJustifyH("LEFT")
     hdr:SetText(label)
 
@@ -81,9 +79,6 @@ local function MakePanel(label, anchorLeft, anchorRight)
     sf:SetPoint("TOPLEFT",     bg, "TOPLEFT",     4,   -4)
     sf:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -22,  4)
 
-    -- Fix the EditBox width once at creation time based on the known panel size.
-    -- Avoid OnSizeChanged — it triggers layout recalculations that scroll the
-    -- box back to the top while content is still being written.
     local ebWidth = math.floor((WIN_W - PAD * 2 - PANEL_GAP) / 2) - 30
     local eb = CreateFrame("EditBox", nil, sf)
     eb:SetMultiLine(true)
@@ -91,7 +86,7 @@ local function MakePanel(label, anchorLeft, anchorRight)
     eb:EnableMouse(true)
     eb:SetFontObject(ChatFontNormal)
     eb:SetWidth(ebWidth)
-    eb:SetHeight(2000)   -- large fixed height; content never exceeds this for a single session
+    eb:SetHeight(2000)
     eb:SetScript("OnEscapePressed", eb.ClearFocus)
     sf:SetScrollChild(eb)
 
@@ -103,7 +98,6 @@ local function MakePanel(label, anchorLeft, anchorRight)
         lineCount = lineCount + 1
         local cur = eb:GetText()
         eb:SetText(cur == "" and text or (cur .. "\n" .. text))
-        -- No forced scroll — user scrolls manually to read; Ctrl-A to select all
     end
 
     local function ClearPanel()
@@ -137,7 +131,7 @@ anchorBR:SetPoint("TOPLEFT",     anchorBL, "TOPLEFT",     0, 0)
 anchorBR:SetPoint("BOTTOMRIGHT", anchorBL, "BOTTOMRIGHT", 0, 0)
 
 local AppendA, ClearA = MakePanel("|cffffff00[A] COMBAT_LOG_EVENT_UNFILTERED  (hostile NPC dest, throttled)|r", anchorAL, anchorAR)
-local AppendB, ClearB = MakePanel("|cff00ccff[B] BigWigs / DBM  (RAID + PARTY channels only)|r",                anchorBL, anchorBR)
+local AppendB, ClearB = MakePanel("|cff00ccff[B] ALL CHAT_MSG_ADDON traffic  (no channel filter)|r",            anchorBL, anchorBR)
 
 btnClearAll:SetScript("OnClick", function() ClearA() ClearB() end)
 
@@ -176,13 +170,13 @@ clFrame:SetScript("OnEvent", function(self, event)
     end
 end)
 
--- ── Panel B — BigWigs / DBM addon messages (RAID + PARTY only) ───────────────
+-- ── Panel B — ALL addon messages, no channel filter ──────────────────────────
+-- We saw "B^SummitNext^Azgalor" on RAID when talking to the NPC, but nothing
+-- when the wave actually started. Removing the channel filter to catch anything
+-- BigWigs may send on WHISPER, SAY, or other channels at wave-start time.
 
 local addonFrame = CreateFrame("Frame", "PugRaidAddonMsgProbeFrame")
 addonFrame:RegisterEvent("CHAT_MSG_ADDON")
-
--- Channels we care about — wave syncs will come through these, not GUILD/WHISPER
-local allowedChannels = { RAID = true, PARTY = true, RAID_WARNING = true }
 
 local registerFn = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix
                 or RegisterAddonMessagePrefix
@@ -202,11 +196,10 @@ for _, prefix in ipairs(prefixesToRegister) do
 end
 
 AppendB("Registered: " .. table.concat(registered, ", "))
-AppendB("Showing RAID / PARTY / RAID_WARNING only. Trigger a wave with BigWigs running.")
+AppendB("No channel filter — showing everything. Clear before confirming the wave dialog.")
 AppendB("----------------------------------------------------------------------")
 
 addonFrame:SetScript("OnEvent", function(self, event, prefix, payload, channel, sender)
-    if not allowedChannels[channel] then return end
     local t = date("%H:%M:%S")
     AppendB(string.format("[%s]  pfx=%-14s  ch=%-14s  from=%-20s  msg=\"%s\"",
         t, tostring(prefix), tostring(channel), tostring(sender), tostring(payload)))
@@ -215,5 +208,5 @@ end)
 -- ── Show ──────────────────────────────────────────────────────────────────────
 
 AppendA("=== Panel A ready — trigger a Hyjal wave ===")
-AppendB("=== Panel B ready ===")
+AppendB("=== Panel B ready — ALL addon messages, no filter ===")
 win:Show()
