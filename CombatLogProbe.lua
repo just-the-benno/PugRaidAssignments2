@@ -6,10 +6,10 @@
 --   Throttled: one line per unique (subevent + destGUID) pair.
 --
 -- Panel B  (right) — CHAT_MSG_ADDON (BigWigs / DBM addon messages)
---   Registers several known BigWigs/DBM prefixes and listens for ALL
---   CHAT_MSG_ADDON traffic. Prints prefix, channel, sender, and the raw
---   message payload so we can identify exactly what BigWigs broadcasts
---   when a new Hyjal wave starts, and how early relative to Panel A.
+--   Registers several known BigWigs/DBM prefixes.
+--   Only shows messages from RAID or PARTY channels — guild/whisper noise
+--   from other addons is filtered out.
+--   Scroll is manual — no auto-scroll to avoid the "random reset" visual glitch.
 --
 -- HOW TO USE:
 --   1. /reload — both panels open automatically.
@@ -41,7 +41,7 @@ win:SetScript("OnDragStop",  win.StopMovingOrSizing)
 win:SetFrameStrata("HIGH")
 win:SetToplevel(true)
 if win.TitleText then
-    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] BigWigs/DBM Addon Messages|r")
+    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] BigWigs/DBM  (RAID/PARTY only)|r")
 end
 
 local btnClearAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
@@ -50,11 +50,13 @@ btnClearAll:SetText("Clear All")
 btnClearAll:SetPoint("TOPRIGHT", win, "TOPRIGHT", -28, -28)
 
 -- ── Panel factory ─────────────────────────────────────────────────────────────
+-- No OnSizeChanged handler and no auto-scroll — both were causing the visible
+-- "reset" glitch. Content is stable; user scrolls manually and Ctrl-A/Ctrl-C
+-- to copy when ready.
 
 local function MakePanel(label, anchorLeft, anchorRight)
     local hdr = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hdr:SetPoint("TOPLEFT",  anchorLeft,  "TOPLEFT",  0, 0)
-    hdr:SetPoint("TOPRIGHT", anchorRight, "TOPRIGHT", 0, 0)
     hdr:SetJustifyH("LEFT")
     hdr:SetText(label)
 
@@ -79,19 +81,19 @@ local function MakePanel(label, anchorLeft, anchorRight)
     sf:SetPoint("TOPLEFT",     bg, "TOPLEFT",     4,   -4)
     sf:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT", -22,  4)
 
+    -- Fix the EditBox width once at creation time based on the known panel size.
+    -- Avoid OnSizeChanged — it triggers layout recalculations that scroll the
+    -- box back to the top while content is still being written.
+    local ebWidth = math.floor((WIN_W - PAD * 2 - PANEL_GAP) / 2) - 30
     local eb = CreateFrame("EditBox", nil, sf)
     eb:SetMultiLine(true)
     eb:SetAutoFocus(false)
     eb:EnableMouse(true)
     eb:SetFontObject(ChatFontNormal)
-    eb:SetWidth(1)
-    eb:SetHeight(1)
+    eb:SetWidth(ebWidth)
+    eb:SetHeight(2000)   -- large fixed height; content never exceeds this for a single session
     eb:SetScript("OnEscapePressed", eb.ClearFocus)
     sf:SetScrollChild(eb)
-
-    sf:SetScript("OnSizeChanged", function(self, w)
-        eb:SetWidth(math.max(1, w))
-    end)
 
     local lineCount = 0
     local MAX_LINES = 600
@@ -101,7 +103,7 @@ local function MakePanel(label, anchorLeft, anchorRight)
         lineCount = lineCount + 1
         local cur = eb:GetText()
         eb:SetText(cur == "" and text or (cur .. "\n" .. text))
-        sf:SetVerticalScroll(sf:GetVerticalScrollRange())
+        -- No forced scroll — user scrolls manually to read; Ctrl-A to select all
     end
 
     local function ClearPanel()
@@ -135,7 +137,7 @@ anchorBR:SetPoint("TOPLEFT",     anchorBL, "TOPLEFT",     0, 0)
 anchorBR:SetPoint("BOTTOMRIGHT", anchorBL, "BOTTOMRIGHT", 0, 0)
 
 local AppendA, ClearA = MakePanel("|cffffff00[A] COMBAT_LOG_EVENT_UNFILTERED  (hostile NPC dest, throttled)|r", anchorAL, anchorAR)
-local AppendB, ClearB = MakePanel("|cff00ccff[B] BigWigs / DBM addon messages  (ALL prefixes)|r",               anchorBL, anchorBR)
+local AppendB, ClearB = MakePanel("|cff00ccff[B] BigWigs / DBM  (RAID + PARTY channels only)|r",                anchorBL, anchorBR)
 
 btnClearAll:SetScript("OnClick", function() ClearA() ClearB() end)
 
@@ -174,34 +176,22 @@ clFrame:SetScript("OnEvent", function(self, event)
     end
 end)
 
--- ── Panel B — BigWigs / DBM addon message listener ───────────────────────────
--- CHAT_MSG_ADDON fires for all registered addon message prefixes.
--- We register the most common BigWigs and DBM prefixes. Because we don't know
--- the exact prefix yet, we also print ALL incoming CHAT_MSG_ADDON traffic so
--- nothing is missed.
---
--- Each line shows:
---   [HH:MM:SS]  prefix  channel  sender  "payload"
+-- ── Panel B — BigWigs / DBM addon messages (RAID + PARTY only) ───────────────
 
 local addonFrame = CreateFrame("Frame", "PugRaidAddonMsgProbeFrame")
 addonFrame:RegisterEvent("CHAT_MSG_ADDON")
 
--- Register known prefixes so the client delivers them to CHAT_MSG_ADDON.
--- (Unregistered prefixes are silently dropped by the client.)
-local prefixesToRegister = {
-    "BigWigs",
-    "BigWigs3",
-    "BigWigsRez",
-    "BigWigs4",
-    "DBM",
-    "DBM-Core",
-    "DBMv4",
-    "BWPVE",   -- older BigWigs PvE prefix
-    "BWPVP",
-}
+-- Channels we care about — wave syncs will come through these, not GUILD/WHISPER
+local allowedChannels = { RAID = true, PARTY = true, RAID_WARNING = true }
 
 local registerFn = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix
-                or RegisterAddonMessagePrefix  -- TBC Classic fallback
+                or RegisterAddonMessagePrefix
+
+local prefixesToRegister = {
+    "BigWigs", "BigWigs3", "BigWigs4", "BigWigsRez",
+    "DBM", "DBM-Core", "DBMv4",
+    "BWPVE", "BWPVP",
+}
 
 local registered = {}
 for _, prefix in ipairs(prefixesToRegister) do
@@ -211,21 +201,19 @@ for _, prefix in ipairs(prefixesToRegister) do
     if ok then registered[#registered + 1] = prefix end
 end
 
-AppendB("Registered prefixes: " .. table.concat(registered, ", "))
-AppendB("Also printing ALL CHAT_MSG_ADDON traffic regardless of prefix.")
+AppendB("Registered: " .. table.concat(registered, ", "))
+AppendB("Showing RAID / PARTY / RAID_WARNING only. Trigger a wave with BigWigs running.")
 AppendB("----------------------------------------------------------------------")
 
 addonFrame:SetScript("OnEvent", function(self, event, prefix, payload, channel, sender)
+    if not allowedChannels[channel] then return end
     local t = date("%H:%M:%S")
-    AppendB(string.format("[%s]  pfx=%-14s  ch=%-8s  from=%-14s  msg=\"%s\"",
-        t,
-        tostring(prefix),
-        tostring(channel),
-        tostring(sender),
-        tostring(payload)))
+    AppendB(string.format("[%s]  pfx=%-14s  ch=%-14s  from=%-20s  msg=\"%s\"",
+        t, tostring(prefix), tostring(channel), tostring(sender), tostring(payload)))
 end)
 
 -- ── Show ──────────────────────────────────────────────────────────────────────
 
 AppendA("=== Panel A ready — trigger a Hyjal wave ===")
+AppendB("=== Panel B ready ===")
 win:Show()
