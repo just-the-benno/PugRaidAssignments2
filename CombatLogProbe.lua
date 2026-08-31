@@ -4,18 +4,16 @@
 -- Panel A  (left)  — COMBAT_LOG_EVENT_UNFILTERED
 --   Records every event where a hostile NPC is the destination.
 --   Throttled: one line per unique (subevent + destGUID) pair.
---   Also notes whether the mob's GUID matches the current target
---   or any visible nameplate at the moment the event fires.
 --
--- Panel B  (right) — CHAT_MSG_MONSTER_YELL / CHAT_MSG_MONSTER_EMOTE / CHAT_MSG_RAID_BOSS_EMOTE
---   Records every monster yell and emote with a timestamp.
---   This is how DBM/BigWigs detect wave starts in Mount Hyjal.
---   We want to see the exact yell text and timing relative to
---   the first mob appearing in Panel A.
+-- Panel B  (right) — CHAT_MSG_ADDON (BigWigs / DBM addon messages)
+--   Registers several known BigWigs/DBM prefixes and listens for ALL
+--   CHAT_MSG_ADDON traffic. Prints prefix, channel, sender, and the raw
+--   message payload so we can identify exactly what BigWigs broadcasts
+--   when a new Hyjal wave starts, and how early relative to Panel A.
 --
 -- HOW TO USE:
 --   1. /reload — both panels open automatically.
---   2. Trigger a Hyjal wave.
+--   2. Run BigWigs. Trigger a Hyjal wave.
 --   3. Click inside either box, Ctrl-A, Ctrl-C, paste back here.
 --   4. Use the individual Clear buttons or "Clear All" to reset.
 --
@@ -43,7 +41,7 @@ win:SetScript("OnDragStop",  win.StopMovingOrSizing)
 win:SetFrameStrata("HIGH")
 win:SetToplevel(true)
 if win.TitleText then
-    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] Monster Yells / Emotes|r")
+    win.TitleText:SetText("PugRaid Probe  |cffaaaaaa[A] Combat Log     [B] BigWigs/DBM Addon Messages|r")
 end
 
 local btnClearAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
@@ -137,7 +135,7 @@ anchorBR:SetPoint("TOPLEFT",     anchorBL, "TOPLEFT",     0, 0)
 anchorBR:SetPoint("BOTTOMRIGHT", anchorBL, "BOTTOMRIGHT", 0, 0)
 
 local AppendA, ClearA = MakePanel("|cffffff00[A] COMBAT_LOG_EVENT_UNFILTERED  (hostile NPC dest, throttled)|r", anchorAL, anchorAR)
-local AppendB, ClearB = MakePanel("|cff00ccff[B] Monster Yells / Emotes  (wave-start detection)|r",            anchorBL, anchorBR)
+local AppendB, ClearB = MakePanel("|cff00ccff[B] BigWigs / DBM addon messages  (ALL prefixes)|r",               anchorBL, anchorBR)
 
 btnClearAll:SetScript("OnClick", function() ClearA() ClearB() end)
 
@@ -176,42 +174,58 @@ clFrame:SetScript("OnEvent", function(self, event)
     end
 end)
 
--- ── Panel B — Monster yells / emotes ─────────────────────────────────────────
--- These are the events DBM/BigWigs use to detect wave starts.
--- CHAT_MSG_MONSTER_YELL      — boss yells (e.g. Rage Winterchill before wave 1)
--- CHAT_MSG_MONSTER_EMOTE     — boss emotes
--- CHAT_MSG_RAID_BOSS_EMOTE   — raid boss emotes (sometimes used instead)
+-- ── Panel B — BigWigs / DBM addon message listener ───────────────────────────
+-- CHAT_MSG_ADDON fires for all registered addon message prefixes.
+-- We register the most common BigWigs and DBM prefixes. Because we don't know
+-- the exact prefix yet, we also print ALL incoming CHAT_MSG_ADDON traffic so
+-- nothing is missed.
 --
--- For each event we record:
---   [time]  event-type  sender: "message text"
---
--- The wall-clock time lets us compare against Panel A to see how many
--- seconds before the first mob appears in the combat log.
+-- Each line shows:
+--   [HH:MM:SS]  prefix  channel  sender  "payload"
 
-local yellFrame = CreateFrame("Frame", "PugRaidYellProbeFrame")
+local addonFrame = CreateFrame("Frame", "PugRaidAddonMsgProbeFrame")
+addonFrame:RegisterEvent("CHAT_MSG_ADDON")
 
-local yellEventsOK = pcall(function()
-    yellFrame:RegisterEvent("CHAT_MSG_MONSTER_YELL")
-    yellFrame:RegisterEvent("CHAT_MSG_MONSTER_EMOTE")
-    yellFrame:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
-end)
+-- Register known prefixes so the client delivers them to CHAT_MSG_ADDON.
+-- (Unregistered prefixes are silently dropped by the client.)
+local prefixesToRegister = {
+    "BigWigs",
+    "BigWigs3",
+    "BigWigsRez",
+    "BigWigs4",
+    "DBM",
+    "DBM-Core",
+    "DBMv4",
+    "BWPVE",   -- older BigWigs PvE prefix
+    "BWPVP",
+}
 
-if not yellEventsOK then
-    AppendB("|cffff4444Failed to register monster chat events — unexpected in TBC Classic.|r")
-else
-    AppendB("Listening for MONSTER_YELL, MONSTER_EMOTE, RAID_BOSS_EMOTE...")
+local registerFn = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix
+                or RegisterAddonMessagePrefix  -- TBC Classic fallback
+
+local registered = {}
+for _, prefix in ipairs(prefixesToRegister) do
+    local ok = pcall(function()
+        if registerFn then registerFn(prefix) end
+    end)
+    if ok then registered[#registered + 1] = prefix end
 end
 
-yellFrame:SetScript("OnEvent", function(self, event, msg, sender)
-    -- arg1 = message text, arg2 = sender name
-    local t     = date("%H:%M:%S")
-    local etype = event:gsub("CHAT_MSG_", "")   -- shorten for display
-    AppendB(string.format("[%s] %-22s  %s: \"%s\"",
-        t, etype, tostring(sender), tostring(msg)))
+AppendB("Registered prefixes: " .. table.concat(registered, ", "))
+AppendB("Also printing ALL CHAT_MSG_ADDON traffic regardless of prefix.")
+AppendB("----------------------------------------------------------------------")
+
+addonFrame:SetScript("OnEvent", function(self, event, prefix, payload, channel, sender)
+    local t = date("%H:%M:%S")
+    AppendB(string.format("[%s]  pfx=%-14s  ch=%-8s  from=%-14s  msg=\"%s\"",
+        t,
+        tostring(prefix),
+        tostring(channel),
+        tostring(sender),
+        tostring(payload)))
 end)
 
 -- ── Show ──────────────────────────────────────────────────────────────────────
 
 AppendA("=== Panel A ready — trigger a Hyjal wave ===")
-AppendB("=== Panel B ready — waiting for boss yells/emotes ===")
 win:Show()
