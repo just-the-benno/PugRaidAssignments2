@@ -206,14 +206,12 @@ local function Build()
         local ver = S.GetLatestVersion(sess.raidId, doc.id)
         if not ver then return end
         local sections = P.Parse(ver.text)
-        -- Collect lastValues
         local values = {}
         for var in pairs(doc.lastValues or {}) do
             values[var] = S.GetLastValue(sess.raidId, doc.id, var)
         end
         local skippedVars = S.GetSkippedVars(sess, doc.id)
         local msgs = T.BuildMessages(sections, values, skippedVars)
-        -- SESSION mode: validate first
         local personalVars = {}
         for _, sec in ipairs(sections) do
             if sec.kind == "PERSONAL" then
@@ -250,14 +248,10 @@ local function Build()
         for k, _ in pairs(doc.lastValues or {}) do
             values[k] = S.GetLastValue(sess.raidId, doc.id, k)
         end
-
-        -- Shift+click opens assign window
         if IsShiftKeyDown() then
             PugRaidAssignmentsAssignWindow_Open(sess.raidId, doc.id, sections, "SESSION")
             return
         end
-
-        -- Validate
         local skippedVars = S.GetSkippedVars(sess, doc.id)
         local personalVars = {}
         for _, sec in ipairs(sections) do
@@ -283,8 +277,6 @@ local function Build()
             PugRaidAssignmentsAssignWindow_Open(sess.raidId, doc.id, sections, "SESSION", failingVars)
             return
         end
-
-        -- Send everything except LONG
         local toSend = {}
         for _, sec in ipairs(sections) do
             if sec.kind ~= "LONG" and sec.kind ~= "TARGETS" then
@@ -292,11 +284,9 @@ local function Build()
             end
         end
         local msgs = T.BuildMessages(toSend, values, skippedVars)
-        -- Persist values
         for k, v in pairs(values) do
             S.SetLastValue(sess.raidId, doc.id, k, v)
         end
-
         if P.HasBlocks(toSend) then
             local queue = D.BuildPresenterQueue(msgs)
             PugRaidPresenterBar_Open(queue)
@@ -387,4 +377,15 @@ end
 function PugRaidPlayerBar_OnMouseoverKey()
     if not (bar and bar:IsShown()) then return end
     PugRaidTargeting_ExecuteMouseoverTarget(TargetingCallbacks)
+end
+
+-- Called by the PLAYER_TARGET_CHANGED event (via Core.lua).
+-- Silently attempts to mark the new target against the target list.
+-- If the checklist is open it is refreshed; otherwise it stays closed.
+function PugRaidPlayerBar_OnAutoTarget()
+    if not (bar and bar:IsShown()) then return end
+    local sess, raid = GetActiveSessionAndRaid()
+    local doc = GetCurrentDoc(sess, raid)
+    if not sess or not doc then return end
+    PugRaidTargeting_MarkCurrentTarget(sess, doc, TargetingCallbacks)
 end

@@ -65,8 +65,10 @@ local function TryMarkUnit(unitToken, sess, doc)
     return #targets > 0
 end
 
--- Public wrapper so PlayerBar.lua checklist rows can trigger a mark
--- for a specific entry without going through the full state-machine flow.
+-- ── Public helpers ───────────────────────────────────────────────────────────────
+
+-- Mark a specific target-list entry against the given unit token.
+-- Used by checklist [Mark] buttons.
 function PugRaidTargeting_MarkEntry(unitToken, sess, doc, entry)
     local currentIcon = GetRaidTargetIndex(unitToken)
     if currentIcon == entry.iconIndex then
@@ -74,6 +76,20 @@ function PugRaidTargeting_MarkEntry(unitToken, sess, doc, entry)
     else
         if D.MarkTarget(unitToken, entry.iconIndex) then
             S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+        end
+    end
+end
+
+-- Called automatically on PLAYER_TARGET_CHANGED.
+-- Runs TryMarkUnit silently for "target"; refreshes the checklist if it is
+-- already open, but does NOT open it on its own.
+function PugRaidTargeting_MarkCurrentTarget(sess, doc, callbacks)
+    local allDone = TryMarkUnit("target", sess, doc)
+    if callbacks.IsExpanded() then
+        if allDone then
+            callbacks.ShowChecklist(false)
+        else
+            callbacks.RebuildChecklist(sess, doc)
         end
     end
 end
