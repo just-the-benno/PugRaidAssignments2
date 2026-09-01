@@ -1,7 +1,7 @@
 -- Core.lua
 -- Addon entry point: event handling, slash commands, minimap button.
 
--- ── Keybinding globals ────────────────────────────────────────────────────────
+-- ── Keybinding globals ─────────────────────────────────────────────────────────
 -- These must be set as globals so the Key Bindings UI can read them.
 BINDING_HEADER_PUGRAID2    = "Pug Raid Assignments 2"
 BINDING_NAME_PUGRAIDTARGET = "Mark/Open Target Checklist"
@@ -16,6 +16,7 @@ local ADDON_NAME = "PugRaidAssignments2"
 local coreFrame = CreateFrame("Frame")
 coreFrame:RegisterEvent("ADDON_LOADED")
 coreFrame:RegisterEvent("PLAYER_LOGOUT")
+coreFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 
 coreFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -32,10 +33,17 @@ coreFrame:SetScript("OnEvent", function(self, event, arg1)
         if sess then
             PugRaidAssignmentsStorage.TouchSession(sess)
         end
+
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        -- Auto-mark: whenever the player's target changes, check if it matches
+        -- any entry in the current document's target list and apply the icon.
+        -- Only runs while the player bar is visible (i.e. a session is active).
+        if not (PugRaidPlayerBar_IsShown and PugRaidPlayerBar_IsShown()) then return end
+        PugRaidPlayerBar_OnAutoTarget()
     end
 end)
 
--- ── Minimap button ────────────────────────────────────────────────────────────
+-- ── Minimap button ─────────────────────────────────────────────────────────────
 local minimapButton
 
 function PugRaidAssignmentsCore_BuildMinimapButton()
@@ -100,7 +108,7 @@ function PugRaidAssignmentsCore_BuildMinimapButton()
     minimapButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
--- ── Slash commands ────────────────────────────────────────────────────────────
+-- ── Slash commands ───────────────────────────────────────────────────────────
 SLASH_PUGRAID1 = "/pugraid"
 SLASH_PUGRAID2 = "/pra"
 
