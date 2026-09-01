@@ -37,6 +37,7 @@ local function RebuildChecklist(sess, doc)
     for _, row in ipairs(checklistRows) do
         row.icon:Hide()
         row.status:Hide()
+        if row.btn then row.btn:Hide() end
     end
     checklistRows = {}
 
@@ -47,9 +48,10 @@ local function RebuildChecklist(sess, doc)
     local sections = P.Parse(ver.text)
     local targets  = P.GetTargets(sections)
     local tp       = S.GetTargetProgress(sess, doc.id)
-    local rowH = 20
+    local rowH = 22
     local y = -4
     for i, entry in ipairs(targets) do
+        local capturedEntry = entry
 
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
@@ -65,7 +67,18 @@ local function RebuildChecklist(sess, doc)
             statusLbl:SetText("|cffff0000[Missing]|r")
         end
 
-        checklistRows[#checklistRows + 1] = { icon = iconLbl, status = statusLbl }
+        -- Click-to-mark button on each row (marks current target)
+        local btnMark = W.MakeButton(checklistPanel, "Mark", 46, 18)
+        btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i-1)*rowH - 1)
+        btnMark:SetScript("OnClick", function()
+            local s, r = GetActiveSessionAndRaid()
+            local d = GetCurrentDoc(s, r)
+            if not s or not d then return end
+            PugRaidTargeting_MarkEntry("target", s, d, capturedEntry)
+            RebuildChecklist(s, d)
+        end)
+
+        checklistRows[#checklistRows + 1] = { icon = iconLbl, status = statusLbl, btn = btnMark }
     end
 
     local panelH = math.max(30, #targets * rowH + 30)
@@ -113,7 +126,7 @@ local function RefreshBar()
     end
 end
 
--- ── Build ──────────────────────────────────────────────────────────────────────
+-- ── Build ─────────────────────────────────────────────────────────────────────
 
 local function Build()
     bar = CreateFrame("Frame", "PugRaidPlayerBar", UIParent, "BackdropTemplate")

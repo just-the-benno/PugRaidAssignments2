@@ -28,6 +28,7 @@ end
 
 -- Attempts to mark the unit identified by `unitToken` ("target" or "mouseover")
 -- against the current document's target list.
+-- Skips marking if the unit already carries the correct icon.
 -- Returns true if all targets are now done (caller may close the checklist).
 local function TryMarkUnit(unitToken, sess, doc)
     local unitName = UnitName(unitToken)
@@ -40,8 +41,15 @@ local function TryMarkUnit(unitToken, sess, doc)
 
     for _, entry in ipairs(targets) do
         if entry.mobName:lower() == unitName:lower() and not tp.assignedIcons[entry.iconIndex] then
-            if D.MarkTarget(entry.iconIndex) then
+            -- Check if the unit already has the correct icon in the world.
+            local currentIcon = GetRaidTargetIndex(unitToken)
+            if currentIcon == entry.iconIndex then
+                -- Already marked correctly; just record it.
                 S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+            else
+                if D.MarkTarget(unitToken, entry.iconIndex) then
+                    S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+                end
             end
             break
         end
@@ -55,6 +63,19 @@ local function TryMarkUnit(unitToken, sess, doc)
         end
     end
     return #targets > 0
+end
+
+-- Public wrapper so PlayerBar.lua checklist rows can trigger a mark
+-- for a specific entry without going through the full state-machine flow.
+function PugRaidTargeting_MarkEntry(unitToken, sess, doc, entry)
+    local currentIcon = GetRaidTargetIndex(unitToken)
+    if currentIcon == entry.iconIndex then
+        S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+    else
+        if D.MarkTarget(unitToken, entry.iconIndex) then
+            S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+        end
+    end
 end
 
 -- ── Public action functions ────────────────────────────────────────────────────
