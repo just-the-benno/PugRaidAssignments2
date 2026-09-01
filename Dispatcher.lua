@@ -133,15 +133,16 @@ function D.QueuedCount()
     return #sendQueue
 end
 
--- Mark a raid target icon on the current target unit.
+-- Mark a raid target icon on the given unit.
+-- unitToken: WoW unit token, e.g. "target" or "mouseover".
 -- iconIndex: 1-8 per SetRaidTarget API (1=Star ... 8=Skull)
 -- Returns true on success, false if not leader/assist.
-function D.MarkTarget(iconIndex)
+function D.MarkTarget(unitToken, iconIndex)
     -- if not (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) then
     --     print("|cffff8800PugRaid:|r You need to be leader or assist to mark targets.")
     --     return false
     -- end
-    SetRaidTarget("target", iconIndex)
+    SetRaidTarget(unitToken, iconIndex)
     return true
 end
 
