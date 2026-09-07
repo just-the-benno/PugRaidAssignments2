@@ -18,6 +18,9 @@
 --                  rt4 = 4 (Triangle), rt5 = 5 (Moon), rt6 = 6 (Square),
 --                  rt7 = 7 (Cross/X), rt8 = 8 (Skull)
 --                These match SetRaidTarget(unit, index) exactly.
+--                A target line may also use "{{ VariableName }}: rt<N>" to mark
+--                a *friendly* unit (raid/party member, resolved via the same
+--                {{var}} substitution used elsewhere) instead of a mob name.
 
 PugRaidAssignmentsParser = {}
 local P = PugRaidAssignmentsParser
@@ -88,7 +91,14 @@ local ApplyBlockSplitting
 
 -- Parse `text` into a list of sections.
 -- Returns: { { kind, title, lines = {string,...} }, ... }
--- TARGETS sections additionally have .targets = { {mobName, iconIndex}, ... }
+-- TARGETS sections additionally have:
+--   .targets         — combined, ordered list of
+--                       { type = "mob", mobName, iconIndex } and
+--                       { type = "friendly", varName, iconIndex } entries
+--                       (kept for backward compatibility with callers that
+--                       only ever iterate the flat list)
+--   .mobTargets      — just the mob-name entries, { mobName, iconIndex }
+--   .friendlyTargets — just the {{var}} entries, { varName, iconIndex }
 -- Sendable sections will have .blocks = { {lines={}}, ... } if the document
 -- contains any END_OF_BLOCK tokens (see block-splitting comment above).
 function P.Parse(text)
@@ -111,7 +121,7 @@ function P.Parse(text)
             flushSection()
             local titleLower = heading:lower():gsub("^%s+", ""):gsub("%s+$", "")
             local kind = TITLE_TO_KIND[titleLower] or "LONG"
-            currentSection = { kind = kind, title = heading, lines = {}, targets = {} }
+            currentSection = { kind = kind, title = heading, lines = {}, targets = {}, mobTargets = {}, friendlyTargets = {} }
         elseif currentSection then
             currentSection.lines[#currentSection.lines + 1] = line
         end
@@ -122,13 +132,24 @@ function P.Parse(text)
     for _, sec in ipairs(sections) do
         if sec.kind == "TARGETS" then
             for _, ln in ipairs(sec.lines) do
-                -- capture mob name and the rest (token list)
-                local mob, tokenList = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
-                if mob and mob ~= "" and tokenList then
+                -- capture the left-hand side (mob name or {{Variable}}) and the token list
+                local lhs, tokenList = ln:match("^%s*(.-)%s*:%s*(.+)%s*$")
+                if lhs and lhs ~= "" and tokenList then
+                    -- A left-hand side that is exactly "{{ VariableName }}" identifies a
+                    -- friendly unit target instead of a mob name.
+                    local varName = lhs:match("^" .. P.REGEX .. "$")
                     for token in tokenList:gmatch("(rt%d+)") do
                         local idx = RT_TOKEN_TO_INDEX[token:lower()]
                         if idx then
-                            sec.targets[#sec.targets + 1] = { mobName = mob, iconIndex = idx }
+                            if varName then
+                                local entry = { type = "friendly", varName = varName, iconIndex = idx }
+                                sec.friendlyTargets[#sec.friendlyTargets + 1] = entry
+                                sec.targets[#sec.targets + 1] = entry
+                            else
+                                local entry = { type = "mob", mobName = lhs, iconIndex = idx }
+                                sec.mobTargets[#sec.mobTargets + 1] = entry
+                                sec.targets[#sec.targets + 1] = entry
+                            end
                         end
                     end
                 end
@@ -219,11 +240,32 @@ function P.GetVariables(text)
     return vars
 end
 
--- Return the targets list from the TARGETS section, or {} if none.
+-- Return the combined (mob + friendly) targets list from the TARGETS section,
+-- or {} if none. Each entry has a `type` field of "mob" or "friendly".
 function P.GetTargets(sections)
     for _, sec in ipairs(sections) do
         if sec.kind == "TARGETS" then
             return sec.targets
+        end
+    end
+    return {}
+end
+
+-- Return only the mob-name targets from the TARGETS section, or {} if none.
+function P.GetMobTargets(sections)
+    for _, sec in ipairs(sections) do
+        if sec.kind == "TARGETS" then
+            return sec.mobTargets
+        end
+    end
+    return {}
+end
+
+-- Return only the {{var}} friendly-unit targets from the TARGETS section, or {} if none.
+function P.GetFriendlyTargets(sections)
+    for _, sec in ipairs(sections) do
+        if sec.kind == "TARGETS" then
+            return sec.friendlyTargets
         end
     end
     return {}

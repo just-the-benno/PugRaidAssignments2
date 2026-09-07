@@ -44,3 +44,23 @@ end
 function R.CanLead()
     return UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")
 end
+
+-- Resolve a player name to a live unit token ("player", "partyN", or "raidN")
+-- by scanning the current group/raid roster. Returns nil if the name isn't
+-- currently in the group (offline, left, name mismatch, etc.) — callers must
+-- treat that as "can't resolve right now" and no-op rather than error.
+function R.FindUnitByName(name)
+    if not name or name == "" then return nil end
+    if UnitName("player") == name then return "player" end
+    local numMembers = GetNumGroupMembers()
+    if numMembers > 0 then
+        local isRaid = IsInRaid()
+        for i = 1, numMembers do
+            local unit = isRaid and ("raid" .. i) or ("party" .. i)
+            if UnitName(unit) == name then
+                return unit
+            end
+        end
+    end
+    return nil
+end
