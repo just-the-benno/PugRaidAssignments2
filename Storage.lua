@@ -250,3 +250,30 @@ function S.SetVarSkipped(session, docId, varName, isSkipped)
         set[varName] = nil
     end
 end
+
+-- ── Tool Configuration ────────────────────────────────────────────────────────
+
+function S.GetSession(sessionId)
+    if not sessionId or not PugRaidAssignmentsDB or not PugRaidAssignmentsDB.raids then return nil end
+    for _, raid in pairs(PugRaidAssignmentsDB.raids) do
+        if raid.sessions and raid.sessions[sessionId] then
+            return raid.sessions[sessionId]
+        end
+    end
+    return nil
+end
+
+function S.GetToolConfig(raidId, docId, toolType)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return nil end
+    if not doc.tools then return nil end
+    return doc.tools[toolType]
+end
+
+function S.SetToolConfig(raidId, docId, toolConfig)
+    if not toolConfig or not toolConfig.type then return end
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return end
+    if not doc.tools then doc.tools = {} end
+    doc.tools[toolConfig.type] = toolConfig
+end
