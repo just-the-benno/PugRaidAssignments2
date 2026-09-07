@@ -8,6 +8,7 @@ local S = PugRaidAssignmentsStorage
 local P = PugRaidAssignmentsParser
 local T = PugRaidAssignmentsTemplate
 local D = PugRaidAssignmentsDispatcher
+local F = PugRaidAssignmentsFriendlyTargeting
 
 local bar                  -- main bar frame
 local checklistPanel       -- expanded sub-frame
@@ -28,6 +29,19 @@ local function GetCurrentDoc(sess, raid)
     local idx = math.max(1, math.min(sess.currentDocIndex or 1, #docs))
     sess.currentDocIndex = idx
     return docs[idx], idx, #docs
+end
+
+-- Switches the session's current document index, resetting the *previous*
+-- document's target progress so each document starts with a clean
+-- checklist state when you return to it later.
+local function SwitchDocIndex(sess, raid, newIdx)
+    local docs = S.GetDocumentsSorted(sess.raidId)
+    newIdx = math.max(1, math.min(newIdx, #docs))
+    local oldDoc = GetCurrentDoc(sess, raid)
+    if oldDoc and newIdx ~= (sess.currentDocIndex or 1) then
+        S.ResetTargetProgress(sess, oldDoc.id)
+    end
+    sess.currentDocIndex = newIdx
 end
 
 -- ── Checklist ──────────────────────────────────────────────────────────────────
@@ -56,7 +70,8 @@ local function RebuildChecklist(sess, doc)
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
         local iconName = PugRaidAssignmentsParser.ICON_NAMES[entry.iconIndex] or ("rt"..entry.iconIndex)
-        iconLbl:SetText(entry.mobName .. " --> " .. iconName)
+        local label = entry.isFriendly and ("{{" .. entry.varName .. "}}") or entry.mobName
+        iconLbl:SetText(label .. " --> " .. iconName)
         iconLbl:SetWidth(240)
 
         local statusLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -67,14 +82,23 @@ local function RebuildChecklist(sess, doc)
             statusLbl:SetText("|cffff0000[Missing]|r")
         end
 
-        -- Click-to-mark button on each row (marks current target)
-        local btnMark = W.MakeButton(checklistPanel, "Mark", 46, 18)
+        -- Click-to-mark button on each row.
+        -- Mob targets: marks the current target ("Mark").
+        -- Friendly targets: resolves the assigned player from the roster
+        -- and marks that unit directly ("Assign Friendly").
+        local btnLabel = entry.isFriendly and "Assign Friendly" or "Mark"
+        local btnWidth = entry.isFriendly and 100 or 46
+        local btnMark = W.MakeButton(checklistPanel, btnLabel, btnWidth, 18)
         btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i-1)*rowH - 1)
         btnMark:SetScript("OnClick", function()
             local s, r = GetActiveSessionAndRaid()
             local d = GetCurrentDoc(s, r)
             if not s or not d then return end
-            PugRaidTargeting_MarkEntry("target", s, d, capturedEntry)
+            if capturedEntry.isFriendly then
+                F.MarkEntry(s, d, capturedEntry)
+            else
+                PugRaidTargeting_MarkEntry("target", s, d, capturedEntry)
+            end
             RebuildChecklist(s, d)
         end)
 
@@ -167,8 +191,7 @@ local function Build()
     btnPrev:SetScript("OnClick", function()
         local sess, raid = GetActiveSessionAndRaid()
         if not sess then return end
-        local docs = S.GetDocumentsSorted(sess.raidId)
-        sess.currentDocIndex = math.max(1, (sess.currentDocIndex or 1) - 1)
+        SwitchDocIndex(sess, raid, (sess.currentDocIndex or 1) - 1)
         RefreshBar()
     end)
 
@@ -182,8 +205,7 @@ local function Build()
     btnNext:SetScript("OnClick", function()
         local sess, raid = GetActiveSessionAndRaid()
         if not sess then return end
-        local docs = S.GetDocumentsSorted(sess.raidId)
-        sess.currentDocIndex = math.min(#docs, (sess.currentDocIndex or 1) + 1)
+        SwitchDocIndex(sess, raid, (sess.currentDocIndex or 1) + 1)
         RefreshBar()
     end)
 
@@ -287,6 +309,10 @@ local function Build()
         for k, v in pairs(values) do
             S.SetLastValue(sess.raidId, doc.id, k, v)
         end
+        -- Auto-resolve and mark friendly targets (e.g. {{HealerInRange}}: rt3)
+        -- using the just-saved variable values. Unresolvable units are
+        -- silently skipped — this must never block Send.
+        F.MarkAll(sess, doc)
         if P.HasBlocks(toSend) then
             local queue = D.BuildPresenterQueue(msgs)
             PugRaidPresenterBar_Open(queue)
@@ -299,6 +325,15 @@ local function Build()
     local btnTarget = W.MakeButton(bar, "Target", 56, 24)
     btnTarget:SetPoint("LEFT", btnSend, "RIGHT", 4, 0)
     btnTarget:SetScript("OnClick", function()
+        if IsControlKeyDown() then
+            local sess, raid = GetActiveSessionAndRaid()
+            local doc = GetCurrentDoc(sess, raid)
+            if sess and doc then
+                S.ResetTargetProgress(sess, doc.id)
+            end
+            ShowChecklist(true)
+            return
+        end
         PugRaidTargeting_ExecuteManualTarget(TargetingCallbacks)
     end)
 
@@ -345,6 +380,16 @@ local function Build()
     btnCloseChecklist:SetScript("OnClick", function()
         ShowChecklist(false)
     end)
+
+    local btnAssignAllFriendly = W.MakeButton(checklistPanel, "Assign All Friendly", 130, 20)
+    btnAssignAllFriendly:SetPoint("RIGHT", btnCloseChecklist, "LEFT", -4, 0)
+    btnAssignAllFriendly:SetScript("OnClick", function()
+        local sess, raid = GetActiveSessionAndRaid()
+        local doc = GetCurrentDoc(sess, raid)
+        if not sess or not doc then return end
+        F.MarkAll(sess, doc)
+        RebuildChecklist(sess, doc)
+    end)
 end
 
 -- ── Public API ─────────────────────────────────────────────────────────────────
@@ -377,6 +422,12 @@ end
 function PugRaidPlayerBar_OnMouseoverKey()
     if not (bar and bar:IsShown()) then return end
     PugRaidTargeting_ExecuteMouseoverTarget(TargetingCallbacks)
+end
+
+-- Called by the PUGRAID_FRIENDLY_TARGET_KEY keybinding.
+function PugRaidPlayerBar_OnFriendlyTargetKey()
+    if not (bar and bar:IsShown()) then return end
+    PugRaidTargeting_ExecuteFriendlyTarget(TargetingCallbacks)
 end
 
 -- Called by the PLAYER_TARGET_CHANGED event (via Core.lua).
