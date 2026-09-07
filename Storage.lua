@@ -5,12 +5,17 @@
 --   raids = {
 --     [id] = {
 --       id, name, raidType,
---       documents = { [id] = { id, name, order, versions = { [id] = { id, timestamp, text } }, lastValues = { [var] = val } } },
+--       documents = { [id] = { id, name, order, versions = { [id] = { id, timestamp, text } }, lastValues = { [var] = val },
+--                               tools = { [toolId] = { id, toolType, config } } } },
 --       sessions  = { [id] = { id, raidId, startedAt, endedAt, lastSeenAt, currentDocIndex,
 --                               targetProgress = { [docId] = { assignedIcons = { [icon] = true/false } } } } },
 --     }
 --   }
 --   activeSessionId = id | nil   -- globally unique active session
+--
+-- Tools are document-scoped (not versioned): a "tool config" describes one
+-- runtime helper (see ToolManager.lua / Tools/ToolBase.lua) attached to a
+-- document, e.g. { id = "...", toolType = "ToolStub", config = { label = "..." } }.
 
 PugRaidAssignmentsStorage = {}
 local S = PugRaidAssignmentsStorage
@@ -99,6 +104,7 @@ function S.CreateDocument(raidId, name, initialText)
             [verId] = { id = verId, timestamp = time(), text = initialText or "" }
         },
         lastValues = {},
+        tools      = {},
     }
     return raid.documents[docId]
 end
@@ -152,6 +158,57 @@ end
 function S.SetLastValue(raidId, docId, varName, value)
     local doc = S.GetDocument(raidId, docId)
     if doc then doc.lastValues[varName] = value end
+end
+
+-- ── Tools ────────────────────────────────────────────────────────────────────
+-- Tool configs are document-scoped (not versioned): they evolve with the
+-- tactic itself. Shape: { id, toolType, config = { ... } }.
+
+local function EnsureTools(doc)
+    if not doc.tools then doc.tools = {} end
+    return doc.tools
+end
+
+-- Returns every tool config table for a document, keyed by toolId.
+-- Returns an empty table (never nil) if the document has no tools.
+function S.GetAllTools(raidId, docId)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return {} end
+    return EnsureTools(doc)
+end
+
+function S.GetToolConfig(raidId, docId, toolId)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return nil end
+    return EnsureTools(doc)[toolId]
+end
+
+-- Creates or updates a tool config on a document. If toolId is nil, a new
+-- one is generated (used when adding a new tool to a document).
+function S.SetToolConfig(raidId, docId, toolId, toolType, config)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return nil end
+    local tools = EnsureTools(doc)
+    toolId = toolId or NewId()
+    local existing = tools[toolId]
+    tools[toolId] = {
+        id       = toolId,
+        toolType = toolType or (existing and existing.toolType),
+        config   = config or {},
+    }
+    return tools[toolId]
+end
+
+function S.DeleteToolConfig(raidId, docId, toolId)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return end
+    EnsureTools(doc)[toolId] = nil
+end
+
+function S.ClearAllTools(raidId, docId)
+    local doc = S.GetDocument(raidId, docId)
+    if not doc then return end
+    doc.tools = {}
 end
 
 -- ── Sessions ─────────────────────────────────────────────────────────────────
