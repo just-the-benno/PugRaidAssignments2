@@ -11,6 +11,9 @@ function TM.GetToolClass(toolType)
     if toolType == "ManaWatch" then
         return PugRaidAssignmentsToolManaWatch
     end
+    if toolType == "HPWatcher" then
+        return PugRaidAssignmentsToolHPWatcher
+    end
     return nil
 end
 

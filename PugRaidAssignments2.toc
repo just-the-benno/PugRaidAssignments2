@@ -11,9 +11,10 @@ Roster.lua
 Parser.lua
 Template.lua
 Dispatcher.lua
+UI\Widgets.lua
 ToolManager.lua
 ToolManaWatch.lua
-UI\Widgets.lua
+ToolHPWatcher.lua
 UI\ViewWindow.lua
 UI\AssignWindow.lua
 UI\SessionViewWindow.lua
