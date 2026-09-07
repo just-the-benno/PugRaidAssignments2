@@ -6,6 +6,7 @@
 local S = PugRaidAssignmentsStorage
 local P = PugRaidAssignmentsParser
 local D = PugRaidAssignmentsDispatcher
+local R = PugRaidAssignmentsRoster
 
 -- ── Helpers (duplicated from PlayerBar.lua via upvalue) ────────────────────────
 
@@ -41,7 +42,7 @@ local function TryMarkUnit(unitToken, sess, doc)
 
     local ver      = S.GetLatestVersion(sess.raidId, doc.id)
     local sections = ver and P.Parse(ver.text) or {}
-    local targets  = P.GetTargets(sections)
+    local targets  = P.GetMobTargets(sections)
     local tp       = S.GetTargetProgress(sess, doc.id)
 
     -- Step 1: check if this unit already wears a valid icon from the list.
@@ -105,6 +106,46 @@ function PugRaidTargeting_MarkEntry(unitToken, sess, doc, entry)
     end
 end
 
+-- ── Friendly unit resolution ───────────────────────────────────────────────────
+--
+-- Friendly targets ("{{ VarName }}: rt<N>") are resolved on demand rather than
+-- stored: the variable's current value (a roster player name, same as used
+-- everywhere else {{var}} substitution happens) is looked up and matched
+-- against the live raid/party roster to find a unit token.
+
+-- Resolve a friendly-target variable name to a live unit token, or nil if the
+-- variable has no assigned value or that value isn't currently in the group.
+function PugRaidTargeting_ResolveFriendlyUnit(varName, sess, doc)
+    local value = S.GetLastValue(sess.raidId, doc.id, varName)
+    if not value or value == "" then return nil end
+    return R.FindUnitByName(value)
+end
+
+-- Mark a single friendly-target entry ({ type="friendly", varName, iconIndex })
+-- by resolving its variable to a unit token and applying the icon.
+-- Returns true if the unit was resolved and marked, false otherwise (no-op).
+function PugRaidTargeting_MarkFriendlyEntry(sess, doc, entry)
+    local unit = PugRaidTargeting_ResolveFriendlyUnit(entry.varName, sess, doc)
+    if not unit then return false end
+    if D.MarkTarget(unit, entry.iconIndex) then
+        S.MarkIconAssigned(sess, doc.id, entry.iconIndex)
+        return true
+    end
+    return false
+end
+
+-- Resolve and mark every friendly target in the document's TARGETS section.
+-- Unresolvable entries are silently skipped (no error, no blocking).
+-- Used both by the Send flow and by the "Assign Friendly" button/keybinding.
+function PugRaidTargeting_MarkAllFriendlyTargets(sess, doc)
+    local ver = S.GetLatestVersion(sess.raidId, doc.id)
+    local sections = ver and P.Parse(ver.text) or {}
+    local friendlyTargets = P.GetFriendlyTargets(sections)
+    for _, entry in ipairs(friendlyTargets) do
+        PugRaidTargeting_MarkFriendlyEntry(sess, doc, entry)
+    end
+end
+
 -- Called automatically on PLAYER_TARGET_CHANGED.
 -- Runs TryMarkUnit silently for "target"; refreshes the checklist if it is
 -- already open, but does NOT open it on its own.
@@ -165,4 +206,23 @@ function PugRaidTargeting_ExecuteMouseoverTarget(callbacks)
         callbacks.ShowChecklist(true)
         callbacks.RebuildChecklist(sess, doc)
     end
+end
+
+-- Resolves and marks every friendly target for the current document
+-- (see PugRaidTargeting_MarkAllFriendlyTargets), then shows/refreshes the
+-- checklist so the raid leader can see what got marked. Bound to the
+-- "Assign Friendly Target" keybinding and the checklist's "Assign Friendly"
+-- buttons.
+function PugRaidTargeting_ExecuteAssignFriendly(callbacks)
+    local sess, raid = GetActiveSessionAndRaid()
+    local doc = GetCurrentDoc(sess, raid)
+
+    if not doc then
+        callbacks.ShowChecklist(true)
+        return
+    end
+
+    PugRaidTargeting_MarkAllFriendlyTargets(sess, doc)
+    callbacks.ShowChecklist(true)
+    callbacks.RebuildChecklist(sess, doc)
 end

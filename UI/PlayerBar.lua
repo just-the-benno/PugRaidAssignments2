@@ -38,6 +38,7 @@ local function RebuildChecklist(sess, doc)
         row.icon:Hide()
         row.status:Hide()
         if row.btn then row.btn:Hide() end
+        if row.friendlyBtn then row.friendlyBtn:Hide() end
     end
     checklistRows = {}
 
@@ -52,24 +53,26 @@ local function RebuildChecklist(sess, doc)
     local y = -4
     for i, entry in ipairs(targets) do
         local capturedEntry = entry
+        local isFriendly = entry.type == "friendly"
 
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
         local iconName = PugRaidAssignmentsParser.ICON_NAMES[entry.iconIndex] or ("rt"..entry.iconIndex)
-        iconLbl:SetText(entry.mobName .. " --> " .. iconName)
-        iconLbl:SetWidth(240)
+        local label = isFriendly and ("{{" .. entry.varName .. "}}") or entry.mobName
+        iconLbl:SetText(label .. " --> " .. iconName)
+        iconLbl:SetWidth(190)
 
         local statusLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statusLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 250, y - (i-1)*rowH)
+        statusLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 200, y - (i-1)*rowH)
         if tp.assignedIcons[entry.iconIndex] then
             statusLbl:SetText("|cff00ff00[Done]|r")
         else
-            statusLbl:SetText("|cffff0000[Missing]|r")
+            statusLbl:SetText(isFriendly and "|cffff0000[Unresolved]|r" or "|cffff0000[Missing]|r")
         end
 
         -- Click-to-mark button on each row (marks current target)
         local btnMark = W.MakeButton(checklistPanel, "Mark", 46, 18)
-        btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i-1)*rowH - 1)
+        btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 270, y - (i-1)*rowH - 1)
         btnMark:SetScript("OnClick", function()
             local s, r = GetActiveSessionAndRaid()
             local d = GetCurrentDoc(s, r)
@@ -78,7 +81,22 @@ local function RebuildChecklist(sess, doc)
             RebuildChecklist(s, d)
         end)
 
-        checklistRows[#checklistRows + 1] = { icon = iconLbl, status = statusLbl, btn = btnMark }
+        local btnAssignFriendly
+        if isFriendly then
+            -- Auto-resolve this variable's value against the raid/party roster
+            -- and mark it directly — no need to hard-target the unit first.
+            btnAssignFriendly = W.MakeButton(checklistPanel, "Assign Friendly", 108, 18)
+            btnAssignFriendly:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i-1)*rowH - 1)
+            btnAssignFriendly:SetScript("OnClick", function()
+                local s, r = GetActiveSessionAndRaid()
+                local d = GetCurrentDoc(s, r)
+                if not s or not d then return end
+                PugRaidTargeting_MarkFriendlyEntry(s, d, capturedEntry)
+                RebuildChecklist(s, d)
+            end)
+        end
+
+        checklistRows[#checklistRows + 1] = { icon = iconLbl, status = statusLbl, btn = btnMark, friendlyBtn = btnAssignFriendly }
     end
 
     local panelH = math.max(30, #targets * rowH + 30)
@@ -287,6 +305,13 @@ local function Build()
         for k, v in pairs(values) do
             S.SetLastValue(sess.raidId, doc.id, k, v)
         end
+        -- Auto-resolve and mark any friendly ({{var}}) targets using the
+        -- values just confirmed above. Unresolvable units are silently
+        -- skipped — this never blocks the send.
+        PugRaidTargeting_MarkAllFriendlyTargets(sess, doc)
+        if _isExpanded then
+            RebuildChecklist(sess, doc)
+        end
         if P.HasBlocks(toSend) then
             local queue = D.BuildPresenterQueue(msgs)
             PugRaidPresenterBar_Open(queue)
@@ -377,6 +402,13 @@ end
 function PugRaidPlayerBar_OnMouseoverKey()
     if not (bar and bar:IsShown()) then return end
     PugRaidTargeting_ExecuteMouseoverTarget(TargetingCallbacks)
+end
+
+-- Called by the PUGRAID_ASSIGN_FRIENDLY_KEY keybinding.
+-- Resolves and marks all friendly ({{var}}) targets for the current document.
+function PugRaidPlayerBar_OnAssignFriendlyKey()
+    if not (bar and bar:IsShown()) then return end
+    PugRaidTargeting_ExecuteAssignFriendly(TargetingCallbacks)
 end
 
 -- Called by the PLAYER_TARGET_CHANGED event (via Core.lua).

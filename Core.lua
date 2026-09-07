@@ -5,6 +5,7 @@
 -- These must be set as globals so the Key Bindings UI can read them.
 BINDING_HEADER_PUGRAID2    = "Pug Raid Assignments 2"
 BINDING_NAME_PUGRAIDTARGET = "Mark/Open Target Checklist"
+BINDING_NAME_PUGRAID_ASSIGN_FRIENDLY_KEY = "Assign Friendly Target"
 
 -- Global function invoked by the PUGRAIDTARGET keybinding.
 function PUGRAIDTARGET()
