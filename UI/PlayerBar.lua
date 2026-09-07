@@ -10,8 +10,8 @@ local T = PugRaidAssignmentsTemplate
 local D = PugRaidAssignmentsDispatcher
 local F = PugRaidAssignmentsFriendlyTargeting
 
-local bar                  -- main bar frame
-local checklistPanel       -- expanded sub-frame
+local bar            -- main bar frame
+local checklistPanel -- expanded sub-frame
 local lblDocName
 local checklistRows = {}
 local _isExpanded = false
@@ -62,20 +62,32 @@ local function RebuildChecklist(sess, doc)
     local sections = P.Parse(ver.text)
     local targets  = P.GetTargets(sections)
     local tp       = S.GetTargetProgress(sess, doc.id)
-    local rowH = 22
-    local y = -4
+    local rowH     = 22
+    local y        = -4
     for i, entry in ipairs(targets) do
         local capturedEntry = entry
 
         local iconLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i-1)*rowH)
-        local iconName = PugRaidAssignmentsParser.ICON_NAMES[entry.iconIndex] or ("rt"..entry.iconIndex)
-        local label = entry.isFriendly and ("{{" .. entry.varName .. "}}") or entry.mobName
+        iconLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 6, y - (i - 1) * rowH)
+        local iconName = PugRaidAssignmentsParser.ICON_NAMES[entry.iconIndex] or ("rt" .. entry.iconIndex)
+
+        local label
+        if entry.isFriendly then
+            -- Resolve the variable to get the actual player name
+            local sess, raid = GetActiveSessionAndRaid()
+            local doc = GetCurrentDoc(sess, raid)
+            local resolvedName = (sess and doc) and S.GetLastValue(sess.raidId, doc.id, entry.varName) or nil
+            local playerName = (resolvedName and resolvedName ~= "") and resolvedName or ("<MISSING>")
+            label = playerName .. " (" .. entry.varName .. ")"
+        else
+            label = entry.mobName
+        end
+
         iconLbl:SetText(label .. " --> " .. iconName)
         iconLbl:SetWidth(240)
 
         local statusLbl = checklistPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statusLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 250, y - (i-1)*rowH)
+        statusLbl:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 250, y - (i - 1) * rowH)
         if tp.assignedIcons[entry.iconIndex] then
             statusLbl:SetText("|cff00ff00[Done]|r")
         else
@@ -89,7 +101,7 @@ local function RebuildChecklist(sess, doc)
         local btnLabel = entry.isFriendly and "Assign Friendly" or "Mark"
         local btnWidth = entry.isFriendly and 100 or 46
         local btnMark = W.MakeButton(checklistPanel, btnLabel, btnWidth, 18)
-        btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i-1)*rowH - 1)
+        btnMark:SetPoint("TOPLEFT", checklistPanel, "TOPLEFT", 320, y - (i - 1) * rowH - 1)
         btnMark:SetScript("OnClick", function()
             local s, r = GetActiveSessionAndRaid()
             local d = GetCurrentDoc(s, r)
@@ -126,8 +138,8 @@ end
 -- Passed to the targeting module so it can drive checklist state
 -- without needing direct access to this file's locals.
 local TargetingCallbacks = {
-    IsExpanded      = function() return _isExpanded end,
-    ShowChecklist   = function(show) ShowChecklist(show) end,
+    IsExpanded       = function() return _isExpanded end,
+    ShowChecklist    = function(show) ShowChecklist(show) end,
     RebuildChecklist = function(sess, doc) RebuildChecklist(sess, doc) end,
 }
 
@@ -157,10 +169,12 @@ local function Build()
     bar:SetSize(680, 34)
     bar:SetPoint("TOP", UIParent, "TOP", 0, -200)
     bar:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     bar:SetBackdropColor(0, 0, 0, 0.85)
     bar:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
@@ -182,7 +196,7 @@ local function Build()
         self:StopMovingOrSizing()
         local point, _, relPoint, x, y = self:GetPoint()
         if PugRaidAssignmentsDB then
-            PugRaidAssignmentsDB.playerBarPos = { point=point, relPoint=relPoint, x=x, y=y }
+            PugRaidAssignmentsDB.playerBarPos = { point = point, relPoint = relPoint, x = x, y = y }
         end
     end)
 
@@ -241,7 +255,7 @@ local function Build()
                     local target = ln:match("^%s*(.-)%s*:")
                     if target then
                         local v = target:match("{{(%w+)}}")
-                        if v then personalVars[#personalVars+1] = v end
+                        if v then personalVars[#personalVars + 1] = v end
                     end
                 end
             end
@@ -282,7 +296,7 @@ local function Build()
                     local target = ln:match("^%s*(.-)%s*:")
                     if target then
                         local v = target:match("{{(%w+)}}")
-                        if v then personalVars[#personalVars+1] = v end
+                        if v then personalVars[#personalVars + 1] = v end
                     end
                 end
             end
@@ -352,14 +366,16 @@ local function Build()
 
     -- Checklist panel
     checklistPanel = CreateFrame("Frame", nil, bar, "BackdropTemplate")
-    checklistPanel:SetPoint("TOPLEFT",  bar, "BOTTOMLEFT",  0, 0)
+    checklistPanel:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, 0)
     checklistPanel:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, 0)
     checklistPanel:SetHeight(60)
     checklistPanel:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     checklistPanel:SetBackdropColor(0, 0, 0, 0.80)
     checklistPanel:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
