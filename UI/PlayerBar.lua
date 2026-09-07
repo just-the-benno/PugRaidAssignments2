@@ -9,6 +9,7 @@ local P = PugRaidAssignmentsParser
 local T = PugRaidAssignmentsTemplate
 local D = PugRaidAssignmentsDispatcher
 local F = PugRaidAssignmentsFriendlyTargeting
+local TM = PugRaidAssignmentsToolManager
 
 local bar            -- main bar frame
 local checklistPanel -- expanded sub-frame
@@ -42,6 +43,11 @@ local function SwitchDocIndex(sess, raid, newIdx)
         S.ResetTargetProgress(sess, oldDoc.id)
     end
     sess.currentDocIndex = newIdx
+    local newDoc = docs[newIdx]
+    TM.DeactivateAllTools()
+    if newDoc then
+        TM.ActivateToolsForDocument(sess.raidId, newDoc.id, sess.id)
+    end
 end
 
 -- ── Checklist ──────────────────────────────────────────────────────────────────
@@ -360,6 +366,7 @@ local function Build()
             print("|cffffff00PugRaid:|r Session ended.")
             LoggingCombat(false)
         end
+        TM.DeactivateAllTools()
         bar:Hide()
         ShowChecklist(false)
     end)

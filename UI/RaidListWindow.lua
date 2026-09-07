@@ -98,6 +98,12 @@ local function RebuildList()
                 S.CreateSession(capturedRaid.id)
                 LoggingCombat(true)
                 PugRaidPlayerBar_Open()
+                local sess = S.GetActiveSession()
+                local docs = S.GetDocumentsSorted(capturedRaid.id)
+                local doc  = docs[1]
+                if sess and doc then
+                    PugRaidAssignmentsToolManager.ActivateToolsForDocument(capturedRaid.id, doc.id, sess.id)
+                end
             end
         end)
         _raidRows[#_raidRows + 1] = btnStart
@@ -194,9 +200,16 @@ StaticPopupDialogs["PUGRAID_CONFIRM_START_SESSION"] = {
     OnAccept       = function(self, data)
         S.EndSession(data.activeSession)
         LoggingCombat(false)
+        PugRaidAssignmentsToolManager.DeactivateAllTools()
         S.CreateSession(data.newRaidId)
         LoggingCombat(true)
         PugRaidPlayerBar_Open()
+        local sess = S.GetActiveSession()
+        local docs = S.GetDocumentsSorted(data.newRaidId)
+        local doc  = docs[1]
+        if sess and doc then
+            PugRaidAssignmentsToolManager.ActivateToolsForDocument(data.newRaidId, doc.id, sess.id)
+        end
     end,
     timeout        = 0,
     whileDead      = true,

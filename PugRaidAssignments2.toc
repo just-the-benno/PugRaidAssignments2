@@ -11,6 +11,7 @@ Roster.lua
 Parser.lua
 Template.lua
 Dispatcher.lua
+ToolManager.lua
 UI\Widgets.lua
 UI\ViewWindow.lua
 UI\AssignWindow.lua
@@ -22,4 +23,6 @@ UI\FriendlyTargeting.lua
 UI\PlayerBar_Targeting.lua
 UI\PlayerBar.lua
 UI\PresenterBar.lua
+Tools\ToolBase.lua
+Tools\ToolStub.lua
 Core.lua

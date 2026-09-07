@@ -26,6 +26,12 @@ coreFrame:SetScript("OnEvent", function(self, event, arg1)
         local active = PugRaidAssignmentsStorage.GetActiveSession()
         if active then
             PugRaidPlayerBar_Open()
+            local docs = PugRaidAssignmentsStorage.GetDocumentsSorted(active.raidId)
+            local idx  = math.max(1, math.min(active.currentDocIndex or 1, #docs))
+            local doc  = docs[idx]
+            if doc then
+                PugRaidAssignmentsToolManager.ActivateToolsForDocument(active.raidId, doc.id, active.id)
+            end
         end
 
     elseif event == "PLAYER_LOGOUT" then
