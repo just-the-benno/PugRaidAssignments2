@@ -33,18 +33,20 @@ local function RebuildCards()
     if not currentRaidId then return end
 
     local docs = S.GetDocumentsSorted(currentRaidId)
-    local raid  = S.GetRaid(currentRaidId)
+    local raid = S.GetRaid(currentRaidId)
 
-    local y = 0
+    local y    = 0
     for i, doc in ipairs(docs) do
         local card = CreateFrame("Frame", nil, contentFrame, "BackdropTemplate")
         card:SetSize(CARD_W, CARD_H)
         card:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 58, -y)
         card:SetBackdrop({
-            bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+            bgFile = "Interface/Tooltips/UI-Tooltip-Background",
             edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 8,
-            insets = { left=2, right=2, top=2, bottom=2 },
+            tile = true,
+            tileSize = 8,
+            edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
         })
         card:SetBackdropColor(0.1, 0.1, 0.1, 0.9)
         card:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
@@ -117,12 +119,19 @@ local function RebuildCards()
             local sections = P.Parse(ver.text)
             PugRaidAssignmentsAssignWindow_Open(currentRaidId, capturedDoc.id, sections, "AUTHOR")
         end)
-        _docCards[#_docCards + 1] = btnAssign
+
+        local btnTools = W.MakeButton(card, "Tools", 60, 22)
+        btnTools:SetPoint("LEFT", btnAssign, "RIGHT", 4, 0)
+        btnTools:SetScript("OnClick", function()
+            PugRaidAssignmentsDocumentToolsWindow_Open(currentRaidId, capturedDoc.id)
+        end)
+        _docCards[#_docCards + 1] = btnTools
 
         local btnDel = W.MakeButton(card, "Delete", 60, 22)
         btnDel:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 8)
         btnDel:SetScript("OnClick", function()
-            StaticPopup_Show("PUGRAID_CONFIRM_DELETE_DOC", capturedDoc.name, nil, { raidId = currentRaidId, docId = capturedDoc.id })
+            StaticPopup_Show("PUGRAID_CONFIRM_DELETE_DOC", capturedDoc.name, nil,
+                { raidId = currentRaidId, docId = capturedDoc.id })
         end)
         _docCards[#_docCards + 1] = btnDel
 
@@ -134,7 +143,7 @@ end
 
 -- ── Edit / New document form ──────────────────────────────────────────────────
 local editFrame, editNameEB, editNameBg, editTextEB, editTextBg
-local editRaidId, editDocId  -- nil docId = new document
+local editRaidId, editDocId -- nil docId = new document
 
 local function CloseEditFrame()
     if editFrame then editFrame:Hide() end
@@ -254,4 +263,121 @@ end
 
 function PugRaidAssignmentsDocumentsWindow_OpenEdit(raidId, docId)
     OpenEditFrame(raidId, docId)
+end
+
+-- ── Tools Configuration Frame ─────────────────────────────────────────────────
+local toolsFrame, toolsContentFrame
+local toolsRaidId, toolsDocId
+
+local function CloseToolsFrame()
+    if toolsFrame then toolsFrame:Hide() end
+end
+
+local TR = PugRaidAssignmentsToolRegistry
+
+local function CloseToolsFrame()
+    if toolsFrame then toolsFrame:Hide() end
+end
+
+
+local function OpenToolConfigModal(toolType)
+    local toolDef = PugRaidAssignmentsToolRegistry.TOOLS[toolType]
+    if not toolDef then return end
+
+    -- Get or create a temporary tool instance to show config UI
+    local config = S.GetToolConfig(toolsRaidId, toolsDocId, toolType)
+    if not config then
+        config = S.GetToolDefaults(toolType)
+    end
+
+    -- Call the tool's config UI method
+    if toolType == "ManaWatch" then
+        PugRaidAssignmentsToolManaWatch:ShowConfigUI(config)
+    elseif toolType == "HPWatcher" then
+        PugRaidAssignmentsToolHPWatcher:ShowConfigUI(config)
+    end
+end
+
+local function OpenToolsFrame(raidId, docId)
+    toolsRaidId = raidId
+    toolsDocId  = docId
+
+    if not toolsFrame then
+        toolsFrame = W.MakeWindow("PugRaidDocumentToolsFrame", "Document Tools", 380, 320)
+        toolsFrame:SetFrameStrata("HIGH")
+        toolsFrame:SetToplevel(true)
+
+        local lblInfo = toolsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        lblInfo:SetPoint("TOPLEFT", toolsFrame, "TOPLEFT", 14, -44)
+        lblInfo:SetText("Select tools to enable for this document:")
+
+        local sf, cf = W.MakeScrollPane(toolsFrame, 340, 220)
+        sf:SetPoint("TOPLEFT", toolsFrame, "TOPLEFT", 14, -70)
+        toolsContentFrame = cf
+
+        local btnClose = W.MakeButton(toolsFrame, "Close", 80, 22)
+        btnClose:SetPoint("BOTTOMRIGHT", toolsFrame, "BOTTOMRIGHT", -14, 10)
+        btnClose:SetScript("OnClick", CloseToolsFrame)
+    end
+
+    -- Populate checkboxes
+    for _, child in ipairs({ toolsContentFrame:GetChildren() }) do
+        child:Hide()
+        child:SetParent(nil)
+    end
+
+    local enabledTools = S.GetAllTools(toolsRaidId, toolsDocId)
+    local enabledSet = {}
+    for toolId, _ in pairs(enabledTools) do
+        enabledSet[toolId] = true
+    end
+
+    local y = 0
+    for _, toolDef in ipairs(TR.GetAllToolTypes()) do
+        local checkbox = CreateFrame("CheckButton", nil, toolsContentFrame, "UICheckButtonTemplate")
+        checkbox:SetSize(24, 24)
+        checkbox:SetPoint("TOPLEFT", toolsContentFrame, "TOPLEFT", 4, -y)
+
+        local label = checkbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        label:SetPoint("LEFT", checkbox, "RIGHT", 4, 0)
+        label:SetText(toolDef.name)
+
+        checkbox:SetChecked(enabledSet[toolDef.type] or false)
+
+        local capturedType = toolDef.type
+        checkbox:SetScript("OnClick", function(self)
+            if self:GetChecked() then
+                S.SetToolConfig(toolsRaidId, toolsDocId, capturedType, S.GetToolDefaults(capturedType))
+            else
+                S.DeleteToolConfig(toolsRaidId, toolsDocId, capturedType)
+            end
+            OpenToolsFrame(toolsRaidId, toolsDocId) -- Refresh to show/hide config buttons
+        end)
+
+        local btnConfig = W.MakeButton(toolsContentFrame, "Configure", 80, 22)
+        btnConfig:SetPoint("LEFT", toolsContentFrame, "LEFT", 180, -y)
+        btnConfig:SetEnabled(checkbox:GetChecked())
+        btnConfig:SetScript("OnClick", function()
+            OpenToolConfigModal(capturedType)
+        end)
+
+        y = y + 28
+    end
+
+    if y > 0 then
+        toolsContentFrame:SetHeight(y)
+    else
+        toolsContentFrame:SetHeight(1)
+    end
+
+    toolsFrame:Show()
+    toolsFrame:Raise()
+end
+
+function PugRaidAssignmentsDocumentToolsWindow_Open(raidId, docId)
+    OpenToolsFrame(raidId, docId)
+end
+
+function PugRaidAssignmentsDocumentToolsWindow_Open(raidId, docId)
+    OpenToolsFrame(raidId, docId)
 end

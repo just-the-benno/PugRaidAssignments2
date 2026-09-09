@@ -3,6 +3,7 @@
 
 PugRaidAssignmentsToolManager = {}
 local TM = PugRaidAssignmentsToolManager
+local S = PugRaidAssignmentsStorage
 
 local activeTools = {}
 
@@ -59,14 +60,25 @@ function TM.GetActiveTool(toolType)
 end
 
 -- Called when a document is activated in a session to start configured tools
+-- sessionId: the current session ID
+-- docId: the document ID to activate tools for
 function TM.OnDocumentActivated(sessionId, docId)
     TM.StopAllTools()
     if not sessionId or not docId then return end
 
-    local session = PugRaidAssignmentsStorage.GetSession(sessionId)
-    if not session then return end
-
-    local doc = PugRaidAssignmentsStorage.GetDocument(session.raidId, docId)
+    local doc = nil
+    local raidId = nil
+    
+    -- Find the raid and document by searching through all raids
+    for _, raid in pairs(S.GetAllRaids()) do
+        local d = S.GetDocument(raid.id, docId)
+        if d then
+            doc = d
+            raidId = raid.id
+            break
+        end
+    end
+    
     if not doc or not doc.tools then return end
 
     for toolType, config in pairs(doc.tools) do

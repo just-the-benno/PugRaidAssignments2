@@ -24,24 +24,24 @@ local DEFAULT_CONFIG = {
 }
 
 local CLASS_ICON_TCOORDS = _G.CLASS_ICON_TCOORDS or {
-    ["WARRIOR"]     = {0, 0.25, 0, 0.25},
-    ["PALADIN"]     = {0.25, 0.5, 0, 0.25},
-    ["HUNTER"]      = {0.5, 0.75, 0, 0.25},
-    ["ROGUE"]       = {0.75, 1, 0, 0.25},
-    ["PRIEST"]      = {0, 0.25, 0.25, 0.5},
-    ["DEATHKNIGHT"] = {0.25, 0.5, 0.25, 0.5},
-    ["SHAMAN"]      = {0.5, 0.75, 0.25, 0.5},
-    ["MAGE"]        = {0.75, 1, 0.25, 0.5},
-    ["WARLOCK"]     = {0, 0.25, 0.5, 0.75},
-    ["MONK"]        = {0.25, 0.5, 0.5, 0.75},
-    ["DRUID"]       = {0.5, 0.75, 0.5, 0.75},
-    ["DEMONHUNTER"] = {0.75, 1, 0.5, 0.75},
+    ["WARRIOR"]     = { 0, 0.25, 0, 0.25 },
+    ["PALADIN"]     = { 0.25, 0.5, 0, 0.25 },
+    ["HUNTER"]      = { 0.5, 0.75, 0, 0.25 },
+    ["ROGUE"]       = { 0.75, 1, 0, 0.25 },
+    ["PRIEST"]      = { 0, 0.25, 0.25, 0.5 },
+    ["DEATHKNIGHT"] = { 0.25, 0.5, 0.25, 0.5 },
+    ["SHAMAN"]      = { 0.5, 0.75, 0.25, 0.5 },
+    ["MAGE"]        = { 0.75, 1, 0.25, 0.5 },
+    ["WARLOCK"]     = { 0, 0.25, 0.5, 0.75 },
+    ["MONK"]        = { 0.25, 0.5, 0.5, 0.75 },
+    ["DRUID"]       = { 0.5, 0.75, 0.5, 0.75 },
+    ["DEMONHUNTER"] = { 0.75, 1, 0.5, 0.75 },
 }
 
 local ROLE_TCOORDS = {
-    TANK    = {0, 0.296875, 0.34375, 0.640625},
-    HEALER  = {0.3125, 0.609375, 0.015625, 0.3125},
-    DAMAGER = {0.3125, 0.609375, 0.34375, 0.640625},
+    TANK    = { 0, 0.296875, 0.34375, 0.640625 },
+    HEALER  = { 0.3125, 0.609375, 0.015625, 0.3125 },
+    DAMAGER = { 0.3125, 0.609375, 0.34375, 0.640625 },
 }
 
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS or {
@@ -159,10 +159,12 @@ function ToolHPWatcher:BuildFrame()
     local redHeader = CreateFrame("Button", nil, cf, "BackdropTemplate")
     redHeader:SetSize(270, 24)
     redHeader:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     redHeader:SetBackdropColor(0.5, 0.1, 0.1, 0.85)
     redHeader:SetBackdropBorderColor(0.8, 0.2, 0.2, 1)
@@ -188,10 +190,12 @@ function ToolHPWatcher:BuildFrame()
     local amberHeader = CreateFrame("Button", nil, cf, "BackdropTemplate")
     amberHeader:SetSize(270, 24)
     amberHeader:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     amberHeader:SetBackdropColor(0.5, 0.3, 0.0, 0.85)
     amberHeader:SetBackdropBorderColor(0.9, 0.5, 0.1, 1)
@@ -277,6 +281,10 @@ function ToolHPWatcher:OnStop()
 end
 
 function ToolHPWatcher:OnConfigChanged(newConfig)
+    if not self.config then
+        self.config = {}
+    end
+
     if type(newConfig) == "table" then
         for k, v in pairs(newConfig) do
             self.config[k] = CopyTable(v)
@@ -531,7 +539,7 @@ function ToolHPWatcher:UpdateUI()
             for _, p in ipairs(self.redPlayers) do
                 local row = GetRowFrame(self)
                 row:SetPoint("TOPLEFT", self.contentFrame, "TOPLEFT", 0, -y)
-                PopulateRow(row, p, {1, 0.3, 0.3})
+                PopulateRow(row, p, { 1, 0.3, 0.3 })
                 y = y + 22
             end
         end
@@ -559,7 +567,7 @@ function ToolHPWatcher:UpdateUI()
             for _, p in ipairs(self.amberPlayers) do
                 local row = GetRowFrame(self)
                 row:SetPoint("TOPLEFT", self.contentFrame, "TOPLEFT", 0, -y)
-                PopulateRow(row, p, {1, 0.7, 0.2})
+                PopulateRow(row, p, { 1, 0.7, 0.2 })
                 y = y + 22
             end
         end
@@ -570,7 +578,7 @@ function ToolHPWatcher:UpdateUI()
     self.contentFrame:SetHeight(math.max(1, y))
 end
 
-function ToolHPWatcher:ShowConfigUI()
+function PugRaidAssignmentsToolHPWatcher:ShowConfigUI(config)
     if not self.configFrame then
         local cf = W.MakeWindow("PugRaidHPWatcherConfigFrame", "HP Watcher Configuration", 360, 460)
         cf:SetFrameStrata("HIGH")
@@ -659,12 +667,12 @@ function ToolHPWatcher:ShowConfigUI()
             local whisperMsg = self.ebWhisperMessage:GetText()
             if not whisperMsg or whisperMsg == "" then whisperMsg = DEFAULT_CONFIG.whisperMessage end
 
-            self.config.amberThreshold = amberVal
-            self.config.redThreshold = redVal
-            self.config.countdownDuration = durationVal
-            self.config.preCountdownMessage = preMsg
-            self.config.finalMessage = finalMsg
-            self.config.whisperMessage = whisperMsg
+            config.amberThreshold = amberVal
+            config.redThreshold = redVal
+            config.countdownDuration = durationVal
+            config.preCountdownMessage = preMsg
+            config.finalMessage = finalMsg
+            config.whisperMessage = whisperMsg
 
             self:SaveConfigToStorage()
             self:OnConfigChanged(self.config)
@@ -678,12 +686,12 @@ function ToolHPWatcher:ShowConfigUI()
         end)
     end
 
-    self.ebAmberThreshold:SetText(tostring(self.config.amberThreshold or DEFAULT_CONFIG.amberThreshold))
-    self.ebRedThreshold:SetText(tostring(self.config.redThreshold or DEFAULT_CONFIG.redThreshold))
-    self.ebCountdownDuration:SetText(tostring(self.config.countdownDuration or DEFAULT_CONFIG.countdownDuration))
-    self.ebPreCountdownMessage:SetText(tostring(self.config.preCountdownMessage or DEFAULT_CONFIG.preCountdownMessage))
-    self.ebFinalMessage:SetText(tostring(self.config.finalMessage or DEFAULT_CONFIG.finalMessage))
-    self.ebWhisperMessage:SetText(tostring(self.config.whisperMessage or DEFAULT_CONFIG.whisperMessage))
+    self.ebAmberThreshold:SetText(tostring(config.amberThreshold or DEFAULT_CONFIG.amberThreshold))
+    self.ebRedThreshold:SetText(tostring(config.redThreshold or DEFAULT_CONFIG.redThreshold))
+    self.ebCountdownDuration:SetText(tostring(config.countdownDuration or DEFAULT_CONFIG.countdownDuration))
+    self.ebPreCountdownMessage:SetText(tostring(config.preCountdownMessage or DEFAULT_CONFIG.preCountdownMessage))
+    self.ebFinalMessage:SetText(tostring(config.finalMessage or DEFAULT_CONFIG.finalMessage))
+    self.ebWhisperMessage:SetText(tostring(config.whisperMessage or DEFAULT_CONFIG.whisperMessage))
 
     self.configFrame:Show()
     self.configFrame:Raise()
@@ -704,15 +712,17 @@ end
 function ToolHPWatcher:SaveConfigToStorage()
     if not self.docId then return end
     local raidId = nil
-    if self.sessionId then
-        local sess = S.GetSession(self.sessionId)
-        if sess then raidId = sess.raidId end
+
+    -- Find the raid by searching all raids for this document
+    for _, raid in pairs(S.GetAllRaids()) do
+        local doc = S.GetDocument(raid.id, self.docId)
+        if doc then
+            raidId = raid.id
+            break
+        end
     end
-    if not raidId then
-        local active = S.GetActiveSession()
-        if active then raidId = active.raidId end
-    end
+
     if raidId and self.docId then
-        S.SetToolConfig(raidId, self.docId, self.config)
+        S.SetToolConfig(raidId, self.docId, self.config.type, self.config)
     end
 end

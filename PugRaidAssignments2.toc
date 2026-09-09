@@ -11,6 +11,7 @@ Roster.lua
 Parser.lua
 Template.lua
 Dispatcher.lua
+ToolRegistry.lua
 UI\Widgets.lua
 ToolManager.lua
 ToolManaWatch.lua

@@ -3,8 +3,8 @@
 
 -- ── Keybinding globals ─────────────────────────────────────────────────────────
 -- These must be set as globals so the Key Bindings UI can read them.
-BINDING_HEADER_PUGRAID2    = "Pug Raid Assignments 2"
-BINDING_NAME_PUGRAIDTARGET = "Mark/Open Target Checklist"
+BINDING_HEADER_PUGRAID2                  = "Pug Raid Assignments 2"
+BINDING_NAME_PUGRAIDTARGET               = "Mark/Open Target Checklist"
 BINDING_NAME_PUGRAID_FRIENDLY_TARGET_KEY = "Assign Friendly Target"
 
 -- Global function invoked by the PUGRAIDTARGET keybinding.
@@ -26,15 +26,18 @@ coreFrame:SetScript("OnEvent", function(self, event, arg1)
         local active = PugRaidAssignmentsStorage.GetActiveSession()
         if active then
             PugRaidPlayerBar_Open()
+            -- Activate tools for the initial document
+            local docs = PugRaidAssignmentsStorage.GetDocumentsSorted(active.raidId)
+            if docs[1] then
+                PugRaidAssignmentsToolManager.OnDocumentActivated(active.id, docs[1].id)
+            end
         end
-
     elseif event == "PLAYER_LOGOUT" then
         -- Touch the active session so "lastSeenAt" is set (used as fallback end time)
         local sess = PugRaidAssignmentsStorage.GetActiveSession()
         if sess then
             PugRaidAssignmentsStorage.TouchSession(sess)
         end
-
     elseif event == "PLAYER_TARGET_CHANGED" then
         -- Auto-mark: whenever the player's target changes, check if it matches
         -- any entry in the current document's target list and apply the icon.
@@ -79,10 +82,10 @@ function PugRaidAssignmentsCore_BuildMinimapButton()
     minimapButton:SetScript("OnDragStart", function(self)
         dragging = true
         self:SetScript("OnUpdate", function()
-            local cx, cy = Minimap:GetCenter()
-            local mx, my = GetCursorPosition()
-            local scale  = UIParent:GetEffectiveScale()
-            mx, my = mx / scale, my / scale
+            local cx, cy   = Minimap:GetCenter()
+            local mx, my   = GetCursorPosition()
+            local scale    = UIParent:GetEffectiveScale()
+            mx, my         = mx / scale, my / scale
             local newAngle = math.atan2(my - cy, mx - cx)
             self:ClearAllPoints()
             self:SetPoint("CENTER", Minimap, "CENTER",

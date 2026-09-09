@@ -20,24 +20,24 @@ local DEFAULT_CONFIG = {
 }
 
 local CLASS_ICON_TCOORDS = _G.CLASS_ICON_TCOORDS or {
-    ["WARRIOR"]     = {0, 0.25, 0, 0.25},
-    ["PALADIN"]     = {0.25, 0.5, 0, 0.25},
-    ["HUNTER"]      = {0.5, 0.75, 0, 0.25},
-    ["ROGUE"]       = {0.75, 1, 0, 0.25},
-    ["PRIEST"]      = {0, 0.25, 0.25, 0.5},
-    ["DEATHKNIGHT"] = {0.25, 0.5, 0.25, 0.5},
-    ["SHAMAN"]      = {0.5, 0.75, 0.25, 0.5},
-    ["MAGE"]        = {0.75, 1, 0.25, 0.5},
-    ["WARLOCK"]     = {0, 0.25, 0.5, 0.75},
-    ["MONK"]        = {0.25, 0.5, 0.5, 0.75},
-    ["DRUID"]       = {0.5, 0.75, 0.5, 0.75},
-    ["DEMONHUNTER"] = {0.75, 1, 0.5, 0.75},
+    ["WARRIOR"]     = { 0, 0.25, 0, 0.25 },
+    ["PALADIN"]     = { 0.25, 0.5, 0, 0.25 },
+    ["HUNTER"]      = { 0.5, 0.75, 0, 0.25 },
+    ["ROGUE"]       = { 0.75, 1, 0, 0.25 },
+    ["PRIEST"]      = { 0, 0.25, 0.25, 0.5 },
+    ["DEATHKNIGHT"] = { 0.25, 0.5, 0.25, 0.5 },
+    ["SHAMAN"]      = { 0.5, 0.75, 0.25, 0.5 },
+    ["MAGE"]        = { 0.75, 1, 0.25, 0.5 },
+    ["WARLOCK"]     = { 0, 0.25, 0.5, 0.75 },
+    ["MONK"]        = { 0.25, 0.5, 0.5, 0.75 },
+    ["DRUID"]       = { 0.5, 0.75, 0.5, 0.75 },
+    ["DEMONHUNTER"] = { 0.75, 1, 0.5, 0.75 },
 }
 
 local ROLE_TCOORDS = {
-    TANK    = {0, 0.296875, 0.34375, 0.640625},
-    HEALER  = {0.3125, 0.609375, 0.015625, 0.3125},
-    DAMAGER = {0.3125, 0.609375, 0.34375, 0.640625},
+    TANK    = { 0, 0.296875, 0.34375, 0.640625 },
+    HEALER  = { 0.3125, 0.609375, 0.015625, 0.3125 },
+    DAMAGER = { 0.3125, 0.609375, 0.34375, 0.640625 },
 }
 
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS or {
@@ -139,10 +139,12 @@ function ToolManaWatch:BuildFrame()
     local redHeader = CreateFrame("Button", nil, cf, "BackdropTemplate")
     redHeader:SetSize(270, 24)
     redHeader:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     redHeader:SetBackdropColor(0.5, 0.1, 0.1, 0.85)
     redHeader:SetBackdropBorderColor(0.8, 0.2, 0.2, 1)
@@ -168,10 +170,12 @@ function ToolManaWatch:BuildFrame()
     local amberHeader = CreateFrame("Button", nil, cf, "BackdropTemplate")
     amberHeader:SetSize(270, 24)
     amberHeader:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 8, edgeSize = 8,
-        insets = { left=2, right=2, top=2, bottom=2 },
+        tile = true,
+        tileSize = 8,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     amberHeader:SetBackdropColor(0.5, 0.3, 0.0, 0.85)
     amberHeader:SetBackdropBorderColor(0.9, 0.5, 0.1, 1)
@@ -197,7 +201,7 @@ function ToolManaWatch:BuildFrame()
     local btnConfig = W.MakeButton(f, "Config", 90, 22)
     btnConfig:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 14, 10)
     btnConfig:SetScript("OnClick", function()
-        self:ShowConfigUI()
+        self:ShowConfigUI(self.config)
     end)
 
     local btnReset = W.MakeButton(f, "Reset", 90, 22)
@@ -235,7 +239,7 @@ end
 function ToolManaWatch:OnStop()
     self.running = false
     if self.frame then
-        self.frame:SetScript("OnUpdate", nil)
+        --self.frame:SetScript("OnUpdate", nil)
         self.frame:Hide()
     end
     if self.configFrame then
@@ -244,6 +248,10 @@ function ToolManaWatch:OnStop()
 end
 
 function ToolManaWatch:OnConfigChanged(newConfig)
+    if not self.config then
+        self.config = {}
+    end
+
     if type(newConfig) == "table" then
         for k, v in pairs(newConfig) do
             self.config[k] = CopyTable(v)
@@ -379,9 +387,31 @@ function ToolManaWatch:CheckAndAlertPlayers()
                 local powerType = UnitPowerType and UnitPowerType(unit)
                 if powerType == 0 then
                     local mana = UnitMana and UnitMana(unit) or (UnitPower and UnitPower(unit, 0) or 0)
-                    if mana >= amberThresh then
-                        local state = self.playerStates[name]
-                        if state then
+                    local state = self.playerStates[name]
+                    if not state then
+                        state = { inRed = false, inAmber = false }
+                        self.playerStates[name] = state
+                    end
+
+                    -- Check red threshold first (most critical)
+                    if mana < redThresh then
+                        if not state.inRed then
+                            state.inRed = true
+                            state.inAmber = false -- Red overrides amber
+                            -- Send red message
+                            self:SendManaWarning(name, "red")
+                        end
+                        -- Check amber threshold
+                    elseif mana < amberThresh then
+                        if not state.inAmber then
+                            state.inAmber = true
+                            state.inRed = false
+                            -- Send amber message
+                            self:SendManaWarning(name, "amber")
+                        end
+                        -- Above amber, clear all warnings
+                    else
+                        if state.inRed or state.inAmber then
                             state.inRed = false
                             state.inAmber = false
                         end
@@ -559,7 +589,9 @@ function ToolManaWatch:UpdateUI()
     self.contentFrame:SetHeight(math.max(1, y))
 end
 
-function ToolManaWatch:ShowConfigUI()
+function PugRaidAssignmentsToolManaWatch:ShowConfigUI(config)
+    -- if not config then return end
+
     if not self.configFrame then
         local cf = W.MakeWindow("PugRaidManaWatchConfigFrame", "ManaWatch Configuration", 360, 360)
         cf:SetFrameStrata("HIGH")
@@ -633,14 +665,14 @@ function ToolManaWatch:ShowConfigUI()
             local redMsg = self.ebRedMessage:GetText() or "CRITICAL MANA"
             local amberMsg = self.ebAmberMessage:GetText() or "Mana running low"
 
-            self.config.redThreshold = redVal
-            self.config.amberThreshold = amberVal
-            self.config.scanInterval = intervalVal
-            self.config.redMessage = redMsg
-            self.config.amberMessage = amberMsg
+            config.redThreshold = redVal
+            config.amberThreshold = amberVal
+            config.scanInterval = intervalVal
+            config.redMessage = redMsg
+            config.amberMessage = amberMsg
 
             self:SaveConfigToStorage()
-            self:OnConfigChanged(self.config)
+            self:OnConfigChanged(config)
             self.configFrame:Hide()
         end)
 
@@ -651,11 +683,11 @@ function ToolManaWatch:ShowConfigUI()
         end)
     end
 
-    self.ebRedThreshold:SetText(tostring(self.config.redThreshold or 1200))
-    self.ebAmberThreshold:SetText(tostring(self.config.amberThreshold or 2000))
-    self.ebScanInterval:SetText(tostring(self.config.scanInterval or 150))
-    self.ebRedMessage:SetText(tostring(self.config.redMessage or "CRITICAL MANA"))
-    self.ebAmberMessage:SetText(tostring(self.config.amberMessage or "Mana running low"))
+    self.ebRedThreshold:SetText(tostring(config.redThreshold or 1200))
+    self.ebAmberThreshold:SetText(tostring(config.amberThreshold or 2000))
+    self.ebScanInterval:SetText(tostring(config.scanInterval or 150))
+    self.ebRedMessage:SetText(tostring(config.redMessage or "CRITICAL MANA"))
+    self.ebAmberMessage:SetText(tostring(config.amberMessage or "Mana running low"))
 
     self.configFrame:Show()
     self.configFrame:Raise()
@@ -673,18 +705,17 @@ function ToolManaWatch:SavePosition()
     self:SaveConfigToStorage()
 end
 
-function ToolManaWatch:SaveConfigToStorage()
-    if not self.docId then return end
-    local raidId = nil
-    if self.sessionId then
-        local sess = S.GetSession(self.sessionId)
-        if sess then raidId = sess.raidId end
-    end
+function ToolManaWatch:SaveConfigToStorage(raidId, docId)
+    print("SaveConfigToStorage")
+
+    if not docId then docId = self.docId end
     if not raidId then
         local active = S.GetActiveSession()
         if active then raidId = active.raidId end
     end
-    if raidId and self.docId then
-        S.SetToolConfig(raidId, self.docId, self.config)
+
+    if raidId and docId then
+        print("updating configuration...")
+        S.SetToolConfig(raidId, docId, self.config.type, self.config)
     end
 end

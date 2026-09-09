@@ -40,8 +40,16 @@ local function SwitchDocIndex(sess, raid, newIdx)
     local oldDoc = GetCurrentDoc(sess, raid)
     if oldDoc and newIdx ~= (sess.currentDocIndex or 1) then
         S.ResetTargetProgress(sess, oldDoc.id)
+        -- Deactivate tools for the old document
+        PugRaidAssignmentsToolManager.StopAllTools()
     end
     sess.currentDocIndex = newIdx
+
+    -- Activate tools for the new document
+    local newDoc = docs[newIdx]
+    if newDoc then
+        PugRaidAssignmentsToolManager.OnDocumentActivated(sess.id, newDoc.id)
+    end
 end
 
 -- ── Checklist ──────────────────────────────────────────────────────────────────
@@ -357,6 +365,7 @@ local function Build()
         local sess = S.GetActiveSession()
         if sess then
             S.EndSession(sess)
+            PugRaidAssignmentsToolManager.StopAllTools()
             print("|cffffff00PugRaid:|r Session ended.")
             LoggingCombat(false)
         end
@@ -417,6 +426,16 @@ function PugRaidPlayerBar_Open()
     RefreshBar()
     bar:Show()
     bar:Raise()
+
+        -- Activate tools for the initial document
+    local active = PugRaidAssignmentsStorage.GetActiveSession()
+    if active then
+        local docs = PugRaidAssignmentsStorage.GetDocumentsSorted(active.raidId)
+        if docs[1] then
+            PugRaidAssignmentsToolManager.OnDocumentActivated(active.id, docs[1].id)
+        end
+    end
+
 end
 
 function PugRaidPlayerBar_Close()
